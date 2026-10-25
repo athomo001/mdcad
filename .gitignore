@@ -5,7 +5,18 @@ spec/
 # Agentes de IA
 .claude/
 .agents/
+.agent/
 CLAUDE.md
+GEMINI.md
+.specify/
+.specify-cli/
+specify.md
+
+# Compilados intermedios
+target/
+node_modules/
+dist/
+binarios/
 
 # Sistema y entorno
 .DS_Store

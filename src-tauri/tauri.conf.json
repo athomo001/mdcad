@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "MDCAT Extended",
+  "version": "1.1.0",
+  "identifier": "com.cybeersecurity.mdcat",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MDCAT Extended",
+        "width": 1150,
+        "height": 780,
+        "minWidth": 640,
+        "minHeight": 450,
+        "center": true,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; media-src 'self' data: blob: asset:; img-src 'self' data: asset: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "MDCAT Extended",
+    "copyright": "© 2026 MDCAT Extended. Licencia MIT",
+    "homepage": "https://github.com/cybeersecurity/mdcat",
+    "category": "Productivity",
+    "license": "MIT",
+    "licenseFile": "installer/licencia.rtf",
+    "shortDescription": "Lector y editor de Markdown ultraliviano",
+    "longDescription": "MDCAT Extended es un lector y editor de Markdown ultraliviano hecho en Rust y Tauri: lectura embellecida, editor con vista previa en vivo, índice lateral, 4 temas de color, lectura en voz alta y cápsulas cifradas .mdbin.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd"
+        ],
+        "name": "Markdown",
+        "description": "Documento Markdown",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      },
+      {
+        "ext": [
+          "mdbin"
+        ],
+        "name": "MDBIN",
+        "description": "Cápsula Markdown cifrada (MDBIN)",
+        "role": "Viewer",
+        "mimeType": "application/x-mdbin"
+      }
+    ],
+    "windows": {
+      "wix": {
+        "language": {
+          "es-ES": {
+            "localePath": "installer/es-ES.wxl"
+          }
+        },
+        "bannerPath": "installer/wix-banner.bmp",
+        "dialogImagePath": "installer/wix-dialog.bmp"
+      },
+      "nsis": {
+        "languages": [
+          "Spanish"
+        ],
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/nsis-header.bmp",
+        "sidebarImage": "installer/nsis-sidebar.bmp",
+        "installerHooks": "installer/hooks.nsh",
+        "startMenuFolder": "MDCAT Extended"
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "text"
+      },
+      "rpm": {}
+    }
+  }
+}

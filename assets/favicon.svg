@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Puntas / Mechones de Orejas (Fluffy Ear Tufts) -->
+  <rect x="3" y="1" width="1" height="2" fill="#EA580C"/>
+  <rect x="16" y="1" width="1" height="2" fill="#EA580C"/>
+  <rect x="4" y="2" width="3" height="1" fill="#18181B"/>
+  <rect x="13" y="2" width="3" height="1" fill="#18181B"/>
+
+  <!-- Orejas exteriores e interiores -->
+  <rect x="3" y="3" width="1" height="3" fill="#18181B"/>
+  <rect x="7" y="3" width="1" height="3" fill="#18181B"/>
+  <rect x="12" y="3" width="1" height="3" fill="#18181B"/>
+  <rect x="16" y="3" width="1" height="3" fill="#18181B"/>
+
+  <rect x="4" y="3" width="3" height="3" fill="#F97316"/>
+  <rect x="13" y="3" width="3" height="3" fill="#F97316"/>
+  <rect x="5" y="3" width="1" height="2" fill="#F472B6"/>
+  <rect x="14" y="3" width="1" height="2" fill="#F472B6"/>
+  <rect x="4" y="4" width="1" height="1" fill="#FEF08A"/>
+  <rect x="15" y="4" width="1" height="1" fill="#FEF08A"/>
+
+  <!-- Corona y Cabeza Fluffy -->
+  <rect x="8" y="4" width="4" height="1" fill="#18181B"/>
+  <rect x="8" y="5" width="4" height="2" fill="#C2410C"/>
+
+  <!-- Mechones laterales superiores (Pelaje voluminoso) -->
+  <rect x="2" y="6" width="2" height="1" fill="#EA580C"/>
+  <rect x="16" y="6" width="2" height="1" fill="#EA580C"/>
+  <rect x="1" y="7" width="2" height="1" fill="#18181B"/>
+  <rect x="17" y="7" width="2" height="1" fill="#18181B"/>
+
+  <!-- Frente y Cara Naranja -->
+  <rect x="3" y="6" width="14" height="5" fill="#F97316"/>
+
+  <!-- Rayas atigradas de la frente -->
+  <rect x="9" y="5" width="2" height="3" fill="#9A3412"/>
+  <rect x="6" y="6" width="1" height="2" fill="#9A3412"/>
+  <rect x="13" y="6" width="1" height="2" fill="#9A3412"/>
+
+  <!-- Grandes Ojos 8-Bit con brillo kawaii -->
+  <rect x="5" y="8" width="3" height="3" fill="#09090B"/>
+  <rect x="12" y="8" width="3" height="3" fill="#09090B"/>
+  <rect x="5" y="8" width="1" height="1" fill="#FFFFFF"/>
+  <rect x="12" y="8" width="1" height="1" fill="#FFFFFF"/>
+  <rect x="6" y="10" width="1" height="1" fill="#451A03"/>
+  <rect x="13" y="10" width="1" height="1" fill="#451A03"/>
+
+  <!-- MECHONES DE MEJILLAS EXTRA PELUDAS (Super Fluffy Cheeks) -->
+  <rect x="0" y="9" width="3" height="3" fill="#EA580C"/>
+  <rect x="17" y="9" width="3" height="3" fill="#EA580C"/>
+  <rect x="0" y="10" width="1" height="3" fill="#18181B"/>
+  <rect x="19" y="10" width="1" height="3" fill="#18181B"/>
+  <rect x="1" y="12" width="2" height="2" fill="#EA580C"/>
+  <rect x="17" y="12" width="2" height="2" fill="#EA580C"/>
+
+  <!-- Hocico y Nariz Rosa -->
+  <rect x="8" y="9" width="4" height="3" fill="#FEF08A"/>
+  <rect x="9" y="9" width="2" height="1" fill="#F43F5E"/>
+  <rect x="9" y="10" width="2" height="1" fill="#18181B"/>
+  <rect x="8" y="11" width="1" height="1" fill="#18181B"/>
+  <rect x="11" y="11" width="1" height="1" fill="#18181B"/>
+
+  <!-- Pechera / Melena esponjosa gigante (Fluffy Chest Mane) -->
+  <rect x="4" y="12" width="12" height="5" fill="#FEF3C7"/>
+  <rect x="6" y="13" width="8" height="4" fill="#FFFFFF"/>
+  <rect x="3" y="14" width="2" height="3" fill="#F97316"/>
+  <rect x="15" y="14" width="2" height="3" fill="#F97316"/>
+
+  <!-- Mechones inferiores de la melena -->
+  <rect x="2" y="17" width="16" height="1" fill="#18181B"/>
+  <rect x="5" y="17" width="3" height="1" fill="#FFFFFF"/>
+  <rect x="12" y="17" width="3" height="1" fill="#FFFFFF"/>
+  <rect x="7" y="18" width="6" height="1" fill="#18181B"/>
+
+  <!-- Patitas delanteras asomadas -->
+  <rect x="6" y="16" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="12" y="16" width="2" height="2" fill="#FFFFFF"/>
+</svg>

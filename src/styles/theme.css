@@ -1,0 +1,84 @@
+/* ==========================================================================
+   MDCAT Extended — Sistema de Diseño y Tokens de los 4 Temas Oficiales
+   ========================================================================== */
+
+:root {
+  /* Variables Comunes del Sistema */
+  --font-sans: 'Geist Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --glass-blur: blur(16px);
+  --reading-max-width: 760px; /* ~72 caracteres por línea (CPL) */
+}
+
+/* 1. Tema BLANCO (Paper Light / Lectura Diurna Nítida) */
+[data-theme="blanco"] {
+  --bg-app: #FFFFFF;
+  --bg-surface: #F8FAFC;
+  --bg-surface-elevated: #F1F5F9;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-focus: #2563EB;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --accent-brand: #EA580C;
+  --glass-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+  --code-bg: #F1F5F9;
+  --code-border: #E2E8F0;
+  --table-border: #E2E8F0;
+  --table-stripe: #F8FAFC;
+}
+
+/* 2. Tema NEGRO (OLED Black #000000 Puro / Descanso Visual) */
+[data-theme="negro"], :root:not([data-theme]) {
+  --bg-app: #000000;
+  --bg-surface: #0A0A0A;
+  --bg-surface-elevated: #141414;
+  --border-subtle: #222222;
+  --border-focus: #38BDF8;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent-brand: #F97316;
+  --glass-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.9);
+  --code-bg: #0D1117;
+  --code-border: #30363D;
+  --table-border: #21262D;
+  --table-stripe: #0A0A0A;
+}
+
+/* 3. Tema ROSA (Sakura / Cyber-Rose / Fondo Aterciopelado) */
+[data-theme="rosa"] {
+  --bg-app: #120914;
+  --bg-surface: rgba(30, 16, 32, 0.75);
+  --bg-surface-elevated: #28142A;
+  --border-subtle: rgba(244, 114, 182, 0.18);
+  --border-focus: #F472B6;
+  --text-primary: #FDF2F8;
+  --text-secondary: #F472B6;
+  --text-muted: #9D738E;
+  --accent-brand: #F472B6;
+  --glass-shadow: 0 10px 30px -10px rgba(18, 9, 20, 0.8), 0 0 15px rgba(244, 114, 182, 0.12);
+  --code-bg: #1F0F22;
+  --code-border: rgba(244, 114, 182, 0.25);
+  --table-border: rgba(244, 114, 182, 0.2);
+  --table-stripe: rgba(30, 16, 32, 0.5);
+}
+
+/* 4. Tema VERDE-DORADO (Emerald & Gold / Fondo Bosque con Oro Pulido) */
+[data-theme="verde-dorado"] {
+  --bg-app: #05140E;
+  --bg-surface: rgba(10, 31, 21, 0.75);
+  --bg-surface-elevated: #113626;
+  --border-subtle: rgba(212, 175, 55, 0.25);
+  --border-focus: #D4AF37;
+  --text-primary: #ECFDF5;
+  --text-secondary: #A7F3D0;
+  --text-muted: #6EE7B7;
+  --accent-brand: #D4AF37;       /* Oro pulido */
+  --accent-tip: #10B981;        /* Esmeralda brillante */
+  --glass-shadow: 0 10px 30px -10px rgba(5, 20, 14, 0.8), 0 0 15px rgba(212, 175, 55, 0.15);
+  --code-bg: #082017;
+  --code-border: rgba(212, 175, 55, 0.3);
+  --table-border: rgba(212, 175, 55, 0.2);
+  --table-stripe: rgba(10, 31, 21, 0.5);
+}

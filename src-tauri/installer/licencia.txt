@@ -1,0 +1,37 @@
+MDCAT Extended — Licencia de uso
+================================
+
+¿Qué es MDCAT Extended?
+-----------------------
+MDCAT Extended es un lector y editor de documentos Markdown (.md) ultraliviano para escritorio. Incluye:
+
+  • Modo Lindo (lectura embellecida), 2 Pantallas (editor + vista previa) y Crudo.
+  • Índice lateral (TOC), 4 temas de color y modos de lectura enfocada y biónica.
+  • Recarga automática cuando el archivo cambia en disco.
+  • Lectura en voz alta (TTS) con voces neuronales de Microsoft Edge o voces locales.
+  • Cápsulas cifradas .mdbin (AES-256-GCM + Argon2id).
+
+Al instalarlo, MDCAT Extended se registra como aplicación para abrir archivos .md, .markdown y .mdbin.
+
+Privacidad
+----------
+MDCAT Extended no recopila datos ni envía telemetría. Tus documentos se leen y procesan localmente. Solo se usa Internet en dos casos:
+
+  • Lectura en voz alta con voces neuronales de Microsoft Edge: el texto que se lee se envía al servicio de síntesis de voz de Microsoft. Las voces locales funcionan sin conexión.
+  • Imágenes remotas (https://...) incluidas en un documento: se descargan para mostrarlas.
+
+Licencia (MIT)
+--------------
+MDCAT Extended es software libre y de código abierto, distribuido bajo la licencia MIT. Puedes usarlo, copiarlo, modificarlo y redistribuirlo, también con fines comerciales, siempre que conserves el aviso de copyright y esta licencia. El software se entrega "tal cual", sin garantías de ningún tipo.
+
+A continuación se incluye el texto oficial de la licencia, que es el que tiene validez legal:
+
+MIT License
+
+Copyright (c) 2026 cyBEERsecurity & MDCAT Extended Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MDCAT Extended — Lector de Markdown Ultraliviano</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/src/styles/theme.css">
+  <link rel="stylesheet" href="/src/styles/viewer.css">
+</head>
+<body data-theme="negro">
+
+  <!-- =========================================================================
+       1. ANIMACIÓN DE ENTRADA (SPLASH SCREEN CON GATO FLUFFY 8-BIT)
+       ========================================================================= -->
+  <div id="splash-screen">
+    <div class="cat-avatar-container">
+      <div class="cat-glow"></div>
+      <img src="/assets/icon.jpg" alt="MDCAT Fluffy 8-Bit Cat" class="cat-pixel-art">
+    </div>
+
+    <div class="brand-splash-title">
+      MDCAT
+      <span class="brand-splash-tag">FLUFFY 8-BIT</span>
+    </div>
+
+    <p class="splash-status">Iniciando motor de lectura ultra liviano...</p>
+
+    <div class="progress-track">
+      <div class="progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       2. BARRA DE MENÚS SUPERIOR
+       ========================================================================= -->
+  <header class="menu-bar">
+    <button class="brand-btn" id="brand-btn" title="Acerca de MDCAT Extended">
+      <img src="/assets/favicon.svg" alt="Logo">
+      <span class="brand-title-text">MDCAT</span>
+    </button>
+
+    <div class="menu-item">
+      <button class="menu-btn" data-i18n="menu.file">Archivo</button>
+      <div class="dropdown-menu">
+        <button class="dropdown-action" id="action-open"><span data-i18n="menu.open">Abrir archivo Markdown...</span> <span class="shortcut-badge">Ctrl+O</span></button>
+        <button class="dropdown-action" id="action-save-file"><span data-i18n="menu.saveFile">Guardar cambios</span> <span class="shortcut-badge">Ctrl+S</span></button>
+        <button class="dropdown-action" id="action-export-pdf"><span data-i18n="menu.exportPdf">Exportar a PDF / Imprimir...</span> <span class="shortcut-badge">Ctrl+P</span></button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-action" id="action-close-app" data-i18n="menu.close">Cerrar visor</button>
+      </div>
+    </div>
+
+    <div class="menu-item">
+      <button class="menu-btn" data-i18n="menu.view">Ver</button>
+      <div class="dropdown-menu">
+        <button class="dropdown-action" id="action-view-lindo"><span data-i18n="menu.viewLindo">Modo Lectura (Lindo)</span></button>
+        <button class="dropdown-action" id="action-view-split"><span data-i18n="menu.viewSplit">Modo 2 Pantallas (Dividido)</span> <span class="shortcut-badge">Ctrl+E</span></button>
+        <button class="dropdown-action" id="action-view-crudo"><span data-i18n="menu.viewCrudo">Modo Crudo (Solo Editor)</span></button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-action" id="action-toggle-sidebar"><span data-i18n="menu.toggleSidebar">Alternar Barra Lateral</span> <span class="shortcut-badge">Ctrl+Shift+L</span></button>
+        <button class="dropdown-action" id="action-toggle-tts"><span data-i18n="menu.ttsBar">Barra de Lectura de Voz (TTS)</span> <span class="shortcut-badge">F7</span></button>
+        <button class="dropdown-action" id="action-focus-mode"><span data-i18n="menu.focusMode">Modo Enfoque</span> <span class="shortcut-badge">F8</span></button>
+        <button class="dropdown-action" id="action-typewriter-mode"><span data-i18n="menu.typewriterMode">Modo Máquina de Escribir</span> <span class="shortcut-badge">F9</span></button>
+        <button class="dropdown-action" id="action-toggle-bionic"><span data-i18n="menu.bionicMode">Alternar Lectura Biónica</span> <span class="shortcut-badge">F10</span></button>
+      </div>
+    </div>
+
+    <div class="menu-item">
+      <button class="menu-btn" data-i18n="menu.help">Ayuda</button>
+      <div class="dropdown-menu">
+        <button class="dropdown-action" id="action-shortcuts"><span data-i18n="menu.shortcuts">Atajos y Comandos</span> <span class="shortcut-badge">Ctrl+K</span></button>
+        <button class="dropdown-action" id="action-markdown-guide" data-i18n="menu.markdownGuide">Guía de Sintaxis Markdown</button>
+        <button class="dropdown-action" id="action-report-issue" data-i18n="menu.reportIssue">Reportar un Problema</button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-action" id="action-check-updates" data-i18n="menu.checkUpdates">Buscar Actualizaciones...</button>
+        <button class="dropdown-action" id="action-about" style="font-weight: 700;" data-i18n="menu.about">Acerca de MDCAT Extended</button>
+      </div>
+    </div>
+
+    <!-- Selector de Modo de Vista & Guardar -->
+    <div class="view-mode-bar">
+      <div class="view-mode-selector" id="view-mode-selector">
+        <button class="view-mode-btn active" data-view-mode="lindo" id="view-mode-lindo-btn" title="Modo Lectura Embellecida" data-i18n="viewMode.lindo" data-i18n-title="viewMode.lindoTitle">📖 Lindo</button>
+        <button class="view-mode-btn" data-view-mode="dividido" id="view-mode-split-btn" title="Modo 2 Pantallas: Editor en vivo + Vista Linda" data-i18n="viewMode.split" data-i18n-title="viewMode.splitTitle">⚡ 2 Pantallas</button>
+        <button class="view-mode-btn" data-view-mode="crudo" id="view-mode-crudo-btn" title="Modo Crudo: Solo Editor" data-i18n="viewMode.crudo" data-i18n-title="viewMode.crudoTitle">📝 Crudo</button>
+      </div>
+      <button class="header-action-btn" id="header-save-btn" title="Guardar documento (Ctrl+S)" data-i18n-title="common.saveTitle">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span data-i18n="common.save">Guardar</span>
+      </button>
+    </div>
+
+    <!-- Selector de Temas Oficiales & Conmutador Bilingüe -->
+    <div class="theme-selector-bar">
+      <span style="font-size: 11px; color: var(--text-muted); margin-right: 4px;" data-i18n="menu.themeLabel">Tema:</span>
+      <button class="theme-chip" data-theme="blanco" data-i18n="menu.themes.blanco">Blanco</button>
+      <button class="theme-chip active" data-theme="negro" data-i18n="menu.themes.negro">Negro</button>
+      <button class="theme-chip" data-theme="rosa" data-i18n="menu.themes.rosa">Rosa</button>
+      <button class="theme-chip" data-theme="verde-dorado" data-i18n="menu.themes.verdeDorado">Verde-Oro</button>
+      <button class="lang-chip" id="lang-toggle-btn" title="Cambiar Idioma (ES / EN)">ES</button>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       2.1 BARRA FLOTANTE DE SÍNTESIS DE VOZ (TTS - Spec 09)
+       ========================================================================= -->
+  <div class="tts-player-bar" id="tts-player-bar">
+    <div class="tts-controls-group tts-playback-group">
+      <button class="tts-btn primary" id="tts-play-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        <span data-i18n="tts.play">Escuchar</span>
+      </button>
+      <button class="tts-btn" id="tts-stop-btn" disabled title="Detener lectura" data-i18n-title="tts.stopTitle">⏹</button>
+      <button class="tts-btn" id="tts-prev-heading-btn" title="Título anterior" data-i18n-title="tts.prevHeadingTitle">⏮ Sec</button>
+      <button class="tts-btn" id="tts-prev-btn" disabled title="Bloque anterior" data-i18n-title="tts.prevBlockTitle">◀</button>
+      <button class="tts-btn" id="tts-next-btn" disabled title="Bloque siguiente" data-i18n-title="tts.nextBlockTitle">▶</button>
+      <button class="tts-btn" id="tts-next-heading-btn" title="Título siguiente" data-i18n-title="tts.nextHeadingTitle">Sec ⏭</button>
+      <span class="tts-badge" id="tts-badge" data-i18n="tts.idle">Inactivo</span>
+    </div>
+
+    <div class="tts-controls-group tts-settings-group">
+      <select class="tts-select" id="tts-heading-select" title="Saltar a título o sección" style="min-width: 170px; max-width: 240px;">
+        <option value="" data-i18n="tts.jumpToSection">📑 Saltar a sección...</option>
+      </select>
+      <select class="tts-select" id="tts-voice-select" title="Seleccionar voz" style="max-width: 200px;"></select>
+      <select class="tts-select" id="tts-rate-select" title="Velocidad de reproducción" style="width: 68px;">
+        <option value="0.75">0.75x</option>
+        <option value="1.0" selected>1.0x</option>
+        <option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2.0">2.0x</option>
+      </select>
+      <button class="tts-btn" id="tts-close-btn" title="Cerrar barra TTS" data-i18n-title="tts.closeTitle">✕</button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       3. CONTENEDOR PRINCIPAL (TOC + EDITOR CRUDO + VISOR LINDO)
+       ========================================================================= -->
+  <div class="app-container mode-lindo" id="app-container">
+    <aside class="sidebar-toc" id="sidebar-toc">
+      <div class="sidebar-header" data-i18n="toc.title">Contorno (TOC)</div>
+      <ul class="toc-list" id="toc-list">
+        <!-- Generado dinámicamente -->
+      </ul>
+    </aside>
+
+    <!-- Panel Editor de Markdown Crudo -->
+    <section class="raw-editor-container" id="raw-editor-container">
+      <div class="raw-editor-header">
+        <div class="raw-editor-title-wrap">
+          <span class="raw-editor-icon">📝</span>
+          <span class="raw-editor-title" data-i18n="editor.title">Editor Markdown (Modo Crudo)</span>
+        </div>
+        <div class="raw-editor-status">
+          <span class="raw-editor-badge" id="raw-editor-badge" data-i18n="editor.synced">Sincronizado</span>
+          <span class="raw-editor-counter" id="raw-editor-counter">0 líneas</span>
+        </div>
+      </div>
+      <textarea class="raw-editor-textarea" id="raw-markdown-editor" spellcheck="false" placeholder="Escribe o pega aquí tu Markdown en modo crudo..." data-i18n-placeholder="editor.placeholder"></textarea>
+    </section>
+
+    <!-- Divisor vertical para Split View -->
+    <div class="split-gutter" id="split-gutter"></div>
+
+    <main class="reader-viewport" id="reader-viewport">
+      <article class="markdown-body" id="markdown-content">
+        <!-- Renderizado dinámico de Markdown -->
+      </article>
+    </main>
+  </div>
+
+  <!-- =========================================================================
+       4. BARRA DE ESTADO INFERIOR
+       ========================================================================= -->
+  <footer class="status-bar">
+    <div class="status-left">
+      <span id="status-words">0 palabras</span>
+      <span>•</span>
+      <span id="status-chars">0 caracteres</span>
+    </div>
+    <div class="status-right">
+      <span id="status-time">~0 min de lectura</span>
+      <span>•</span>
+      <span>UTF-8</span>
+      <span>•</span>
+      <span>MDCAT Core (Rust)</span>
+    </div>
+  </footer>
+
+  <!-- =========================================================================
+       5. MODAL ACERCA DE (CON HOMENAJE A cyBEERsecurity)
+       ========================================================================= -->
+  <div class="modal-overlay" id="about-modal-overlay">
+    <div class="about-modal">
+      <div class="about-header">
+        <button class="close-modal-btn" id="close-about-btn">&times;</button>
+        
+        <div style="position: relative; width: 80px; height: 80px; margin: 0 auto 12px;">
+          <div style="position: absolute; inset: -4px; background: radial-gradient(circle, rgba(249, 115, 22, 0.45) 0%, transparent 70%); filter: blur(8px); border-radius: 50%;"></div>
+          <img src="/assets/icon.jpg" alt="MDCAT Fluffy Cat" style="width: 100%; height: 100%; border-radius: 14px; position: relative; z-index: 2; image-rendering: pixelated; border: 1px solid var(--border-subtle);">
+        </div>
+
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;" data-i18n="about.title">MDCAT Extended</h2>
+        <div style="display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-brand); background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); padding: 2px 8px; border-radius: 12px; margin-bottom: 8px;">
+          v1.1.0 • Alpha Release
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; padding: 0 10px;" data-i18n="about.tagline">
+          Lector y analizador de Markdown de nueva generación, ultra liviano, seguro y optimizado para documentos masivos.
+        </p>
+      </div>
+
+      <div style="padding: 16px 24px 24px;">
+        <!-- Tarjeta Oficial de cyBEERsecurity -->
+        <div class="community-card">
+          <img src="/assets/image.png" alt="cyBEERsecurity Logo" class="community-logo">
+          <div class="community-info">
+            <h4>cyBEERsecurity <span class="community-badge" data-i18n="about.communityOrigin">Origen</span></h4>
+            <p data-i18n="about.communityText">Nacido e impulsado con orgullo desde la comunidad cyBEERsecurity. Hacking etilico, ciberseguridad, cerveza y código libre.</p>
+          </div>
+        </div>
+
+        <!-- Ficha técnica rápida -->
+        <div class="specs-grid">
+          <div class="spec-pill">
+            <strong>Core Engine</strong>
+            <span data-i18n="about.coreSpec">Rust (Zero-Copy multihilo)</span>
+          </div>
+          <div class="spec-pill">
+            <strong>Runner Desktop</strong>
+            <span data-i18n="about.runnerSpec">Tauri v2 (Binario ~6 MB)</span>
+          </div>
+          <div class="spec-pill">
+            <strong>Interfaz UI</strong>
+            <span data-i18n="about.uiSpec">Vanilla TS + CSS nativo</span>
+          </div>
+          <div class="spec-pill">
+            <strong>Mascota Oficial</strong>
+            <span data-i18n="about.mascotSpec">Fluffy Orange Cat (8-Bit)</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-muted);">
+          <span data-i18n="about.license">Licencia MIT • Código Abierto</span>
+          <span style="color: var(--accent-brand); font-weight: 600;">cyBEERsecurity</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Premium para Descifrado de Contenedor MDBIN (RFC-001) -->
+  <div class="about-modal-overlay" id="mdbin-modal-overlay">
+    <div class="about-modal mdbin-dialog">
+      <div class="about-modal-header">
+        <div class="modal-title-group">
+          <div class="security-badge-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="3" ry="3"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div>
+            <h3>Cápsula Cifrada MDBIN</h3>
+            <span class="crypto-subbadge">AES-256-GCM • Argon2id</span>
+          </div>
+        </div>
+        <button class="about-close-btn" id="close-mdbin-btn" title="Cerrar modal (Esc)">✕</button>
+      </div>
+
+      <div class="about-modal-body">
+        <div class="crypto-shield-banner">
+          <p id="mdbin-modal-desc">
+            Este documento está protegido con cifrado de grado militar. Ingresa la frase de paso para descifrarlo de forma segura directamente en memoria RAM.
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="mdbin-password-input">Contraseña de Acceso:</label>
+          <div class="input-password-wrapper">
+            <span class="input-icon">🔑</span>
+            <input type="password" id="mdbin-password-input" class="security-input" placeholder="Escribe la contraseña de desbloqueo..." autocomplete="off">
+          </div>
+        </div>
+
+        <div id="mdbin-error-msg" class="crypto-alert-error" style="display: none;">
+          <span class="error-icon">⚠️</span>
+          <span class="error-text">Contraseña incorrecta o el archivo ha sido alterado.</span>
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancel-mdbin-btn" class="btn-secondary">Cancelar</button>
+          <button id="submit-mdbin-btn" class="btn-primary-glow">
+            <span>Descifrar Documento</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

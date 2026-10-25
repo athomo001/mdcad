@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Textos en español del instalador MSI (WiX). Reemplaza los textos genéricos de WixUI. -->
+<WixLocalization Culture="es-ES" Codepage="1252" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="TauriLanguage">3082</String>
+  <String Id="TauriCodepage">1252</String>
+  <String Id="LaunchApp">Abrir MDCAT Extended</String>
+  <String Id="DowngradeErrorMessage">Ya hay instalada una versión más reciente de MDCAT Extended.</String>
+  <String Id="PathEnvVarFeature">Agrega la carpeta de instalación de MDCAT Extended a la variable PATH, para poder abrir archivos con "mdcat-tauri archivo.md" desde la terminal.</String>
+  <String Id="InstallAppFeature">Instala MDCAT Extended y lo asocia a los archivos .md, .markdown y .mdbin.</String>
+
+  <String Id="WelcomeDlgTitle">{\WixUI_Font_Bigger}Bienvenido a MDCAT Extended</String>
+  <String Id="WelcomeDlgDescription">MDCAT Extended es un lector y editor de Markdown ultraliviano hecho en Rust: lectura embellecida, editor con vista previa en vivo, índice lateral, 4 temas, lectura en voz alta y cápsulas cifradas .mdbin.&#13;&#10;&#13;&#10;Al instalarlo podrás abrir tus archivos .md con doble clic.</String>
+  <String Id="ExitDialogTitle">{\WixUI_Font_Bigger}MDCAT Extended está listo</String>
+  <String Id="ExitDialogDescription">La instalación terminó. Haz doble clic en cualquier archivo .md para abrirlo con MDCAT Extended.&#13;&#10;&#13;&#10;Si Windows los abre con otra aplicación: clic derecho &gt; Abrir con &gt; Elegir otra aplicación &gt; MDCAT Extended &gt; Usar siempre.</String>
+</WixLocalization>
