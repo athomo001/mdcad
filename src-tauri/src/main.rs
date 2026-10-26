@@ -2,27 +2,123 @@
 #![windows_subsystem = "windows"]
 
 use mdcat_core::{MarkdownEngine, MdbinContainer, MdbinEnvelope, ProcessedDocument};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+
+/// Pestaña serializada tal como la maneja el frontend (ruta, Markdown crudo, documento procesado, etc.).
+/// Rust solo la transporta entre ventanas, así que se mantiene como JSON opaco.
+type TabSnapshot = serde_json::Value;
+
+/// Registro compartido de las ventanas de documentos.
+#[derive(Default)]
+struct WindowRegistry {
+    /// Etiquetas de ventana de la más a la menos recientemente enfocada.
+    focus_order: Mutex<Vec<String>>,
+    /// Pestañas que una ventana recién creada debe abrir al arrancar.
+    pending_tabs: Mutex<HashMap<String, Vec<TabSnapshot>>>,
+    next_window_id: AtomicU32,
+}
+
+impl WindowRegistry {
+    /// Ventanas abiertas ordenadas por foco reciente (las que nunca tuvieron foco van al final).
+    fn windows_by_recency(&self, app: &AppHandle) -> Vec<WebviewWindow> {
+        let order = self.focus_order.lock().unwrap().clone();
+        let mut windows: Vec<WebviewWindow> = app.webview_windows().into_values().collect();
+        windows.sort_by_key(|w| order.iter().position(|l| l == w.label()).unwrap_or(usize::MAX));
+        windows
+    }
+}
+
+/// Filtra argumentos de línea de comandos dejando solo rutas a archivos existentes.
+fn collect_document_paths<I: IntoIterator<Item = String>>(args: I, cwd: Option<&str>) -> Vec<String> {
+    args.into_iter()
+        .filter_map(|arg| {
+            let mut path = PathBuf::from(&arg);
+            if path.is_relative() {
+                if let Some(dir) = cwd {
+                    path = PathBuf::from(dir).join(path);
+                }
+            }
+            path.is_file().then(|| path.to_string_lossy().to_string())
+        })
+        .collect()
+}
+
+/// Entrega pestañas a otra ventana y la trae al frente.
+fn send_tabs_to(app: &AppHandle, target: &str, tabs: Vec<TabSnapshot>) -> Result<(), String> {
+    let window = app
+        .get_webview_window(target)
+        .ok_or_else(|| format!("La ventana '{}' ya no existe", target))?;
+    app.emit_to(target, "mdcat://tab-incoming", tabs)
+        .map_err(|e| format!("No se pudo enviar la pestaña: {}", e))?;
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+/// Crea una ventana de documentos nueva que abrirá `tabs` al iniciar.
+fn create_document_window(
+    app: &AppHandle,
+    registry: &WindowRegistry,
+    tabs: Vec<TabSnapshot>,
+    position: (f64, f64),
+    size: (f64, f64),
+) -> Result<String, String> {
+    let label = format!("doc-{}", registry.next_window_id.fetch_add(1, Ordering::Relaxed) + 2);
+    registry.pending_tabs.lock().unwrap().insert(label.clone(), tabs);
+
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title("MDCAT Extended")
+        .inner_size(size.0, size.1)
+        .min_inner_size(640.0, 450.0)
+        .position(position.0, position.1)
+        .build()
+        .map_err(|e| {
+            registry.pending_tabs.lock().unwrap().remove(&label);
+            format!("No se pudo crear la ventana: {}", e)
+        })?;
+    Ok(label)
+}
+
+/// Ejecuta trabajo pesado o de red fuera del hilo principal. Tauri corre los comandos síncronos
+/// en el hilo de la ventana, que deja de dibujarse (queda en blanco) mientras el comando dura.
+async fn off_main_thread<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("Tarea interrumpida: {}", e))?
+}
 
 /// Parsea una cadena de texto Markdown a través del motor zero-copy de Rust.
 #[tauri::command]
-fn parse_markdown(content: String) -> Result<ProcessedDocument, String> {
-    Ok(MarkdownEngine::parse(&content))
+async fn parse_markdown(content: String) -> Result<ProcessedDocument, String> {
+    off_main_thread(move || Ok(MarkdownEngine::parse(&content))).await
 }
 
 /// Lee un archivo Markdown (.md o .markdown) del sistema de archivos local y lo parsea.
 #[tauri::command]
-fn read_and_parse_file(path: String) -> Result<ProcessedDocument, String> {
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))?;
-    Ok(MarkdownEngine::parse(&content))
+async fn read_and_parse_file(path: String) -> Result<ProcessedDocument, String> {
+    off_main_thread(move || {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))?;
+        Ok(MarkdownEngine::parse(&content))
+    })
+    .await
 }
 
 /// Lee el contenido en texto plano original de un archivo en disco.
 #[tauri::command]
-fn read_file_content(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))
+async fn read_file_content(path: String) -> Result<String, String> {
+    off_main_thread(move || {
+        std::fs::read_to_string(&path).map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))
+    })
+    .await
 }
 
 /// Inspecciona el sobre en texto claro de un contenedor cifrado .mdbin para IA y metadatos.
@@ -34,38 +130,48 @@ fn inspect_mdbin_envelope(path: String) -> Result<MdbinEnvelope, String> {
         .map_err(|e| format!("Sobre MDBIN no válido: {}", e))
 }
 
-/// Descifra y parsea un archivo .mdbin autenticado con contraseña.
+/// Descifra y parsea un archivo .mdbin autenticado con contraseña (Argon2id es costoso a propósito).
 #[tauri::command]
-fn read_and_decrypt_mdbin(path: String, password: String) -> Result<ProcessedDocument, String> {
-    let bytes = std::fs::read(&path)
-        .map_err(|e| format!("No se pudo leer el archivo MDBIN '{}': {}", path, e))?;
-    let markdown = MdbinContainer::unpack(&bytes, &password)
-        .map_err(|e| format!("{}", e))?;
-    Ok(MarkdownEngine::parse(&markdown))
+async fn read_and_decrypt_mdbin(path: String, password: String) -> Result<ProcessedDocument, String> {
+    off_main_thread(move || {
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("No se pudo leer el archivo MDBIN '{}': {}", path, e))?;
+        let markdown = MdbinContainer::unpack(&bytes, &password)
+            .map_err(|e| format!("{}", e))?;
+        Ok(MarkdownEngine::parse(&markdown))
+    })
+    .await
 }
 
 /// Empaqueta y cifra el documento actual en un archivo .mdbin.
 #[tauri::command]
-fn export_to_mdbin(path: String, markdown: String, password: String, hint: Option<String>) -> Result<(), String> {
-    let bytes = MdbinContainer::pack(&markdown, &password, hint.as_deref())
-        .map_err(|e| format!("Error al cifrar el contenedor MDBIN: {}", e))?;
-    std::fs::write(&path, bytes)
-        .map_err(|e| format!("Error al guardar el archivo '{}': {}", path, e))?;
-    Ok(())
+async fn export_to_mdbin(path: String, markdown: String, password: String, hint: Option<String>) -> Result<(), String> {
+    off_main_thread(move || {
+        let bytes = MdbinContainer::pack(&markdown, &password, hint.as_deref())
+            .map_err(|e| format!("Error al cifrar el contenedor MDBIN: {}", e))?;
+        std::fs::write(&path, bytes)
+            .map_err(|e| format!("Error al guardar el archivo '{}': {}", path, e))?;
+        Ok(())
+    })
+    .await
 }
 
-/// Abre el diálogo nativo de Windows (OpenFileDialog) para seleccionar un archivo .md o .mdbin.
+/// Abre el diálogo nativo de Windows (OpenFileDialog) para seleccionar uno o varios archivos .md o .mdbin.
 #[tauri::command]
-fn open_file_dialog() -> Option<String> {
-    let file = rfd::FileDialog::new()
+fn open_file_dialog() -> Vec<String> {
+    let files = rfd::FileDialog::new()
         .add_filter("Documentos Markdown y Cifrados", &["md", "markdown", "mdbin"])
         .add_filter("Markdown (*.md, *.markdown)", &["md", "markdown"])
         .add_filter("Cápsula Cifrada MDBIN (*.mdbin)", &["mdbin"])
         .add_filter("Todos los archivos (*.*)", &["*"])
         .set_title("Abrir documento en MDCAT Extended")
-        .pick_file();
+        .pick_files();
 
-    file.map(|p| p.to_string_lossy().to_string())
+    files
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect()
 }
 
 /// Abre el diálogo nativo de Windows (SaveFileDialog) para exportar una cápsula .mdbin.
@@ -104,18 +210,127 @@ fn save_markdown_dialog(default_name: Option<String>) -> Option<String> {
     dialog.save_file().map(|p| p.to_string_lossy().to_string())
 }
 
-/// Lee el argumento de línea de comandos de Windows (por ejemplo: `mdcat.exe documento.md`).
+/// Lee los archivos pasados por línea de comandos (por ejemplo: `mdcat.exe a.md b.md`).
+/// Solo la ventana principal los abre; las ventanas creadas al separar pestañas no.
 #[tauri::command]
-fn get_cli_argument() -> Option<String> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        let candidate = &args[1];
-        let path = PathBuf::from(candidate);
-        if path.exists() && path.is_file() {
-            return Some(path.to_string_lossy().to_string());
+fn get_cli_paths(window: WebviewWindow) -> Vec<String> {
+    if window.label() != "main" {
+        return Vec::new();
+    }
+    collect_document_paths(std::env::args().skip(1), None)
+}
+
+/// Entrega a una ventana recién creada las pestañas con las que debe arrancar.
+#[tauri::command]
+fn take_pending_tabs(window: WebviewWindow, registry: State<WindowRegistry>) -> Vec<TabSnapshot> {
+    registry.pending_tabs.lock().unwrap().remove(window.label()).unwrap_or_default()
+}
+
+#[derive(serde::Serialize)]
+struct WindowSummary {
+    label: String,
+    title: String,
+}
+
+/// Lista las demás ventanas de documentos, de la más reciente a la más antigua.
+#[tauri::command]
+fn list_other_windows(app: AppHandle, window: WebviewWindow, registry: State<WindowRegistry>) -> Vec<WindowSummary> {
+    registry
+        .windows_by_recency(&app)
+        .into_iter()
+        .filter(|w| w.label() != window.label())
+        .map(|w| WindowSummary {
+            label: w.label().to_string(),
+            title: w.title().unwrap_or_default(),
+        })
+        .collect()
+}
+
+/// Mueve pestañas a otra ventana existente.
+#[tauri::command]
+fn move_tabs_to_window(app: AppHandle, target: String, tabs: Vec<TabSnapshot>) -> Result<(), String> {
+    send_tabs_to(&app, &target, tabs)
+}
+
+/// Suelta una pestaña arrastrada fuera de su ventana: si el cursor está sobre otra ventana de MDCAT
+/// se une a ella; si no, se abre en una ventana nueva (cuando `allow_new_window` lo permite).
+/// Con `only_new_window` se salta la búsqueda y siempre crea una ventana nueva junto al cursor.
+/// Devuelve la etiqueta de la ventana destino, o `None` si la pestaña debe quedarse donde estaba.
+#[tauri::command]
+async fn drop_tab_at_cursor(
+    app: AppHandle,
+    window: WebviewWindow,
+    registry: State<'_, WindowRegistry>,
+    tab: TabSnapshot,
+    allow_new_window: bool,
+    only_new_window: bool,
+) -> Result<Option<String>, String> {
+    let cursor = app.cursor_position().map_err(|e| e.to_string())?;
+    let contains_cursor = |w: &WebviewWindow| match (w.outer_position(), w.outer_size()) {
+        (Ok(pos), Ok(size)) => {
+            cursor.x >= pos.x as f64
+                && cursor.x < pos.x as f64 + size.width as f64
+                && cursor.y >= pos.y as f64
+                && cursor.y < pos.y as f64 + size.height as f64
+        }
+        _ => false,
+    };
+
+    // Soltada sobre el marco o la barra de título de su propia ventana: no se mueve
+    if !only_new_window && contains_cursor(&window) {
+        return Ok(None);
+    }
+
+    let candidates = if only_new_window { Vec::new() } else { registry.windows_by_recency(&app) };
+    for other in candidates {
+        if other.label() == window.label()
+            || other.is_minimized().unwrap_or(false)
+            || !other.is_visible().unwrap_or(true)
+        {
+            continue;
+        }
+        if contains_cursor(&other) {
+            send_tabs_to(&app, other.label(), vec![tab])?;
+            return Ok(Some(other.label().to_string()));
         }
     }
-    None
+
+    if !allow_new_window {
+        return Ok(None);
+    }
+
+    // La ventana nueva conserva el tamaño de la original y aparece con su barra de pestañas bajo el cursor
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let size = window
+        .inner_size()
+        .map(|s| s.to_logical::<f64>(scale))
+        .map(|s| (s.width, s.height))
+        .unwrap_or((1150.0, 780.0));
+    let position = (cursor.x / scale - 120.0, cursor.y / scale - 50.0);
+    let label = create_document_window(&app, &registry, vec![tab], position, size)?;
+    Ok(Some(label))
+}
+
+/// Pide a todas las demás ventanas que entreguen sus pestañas a la ventana que llama.
+#[tauri::command]
+fn gather_windows_into(app: AppHandle, window: WebviewWindow, registry: State<WindowRegistry>) {
+    for other in registry.windows_by_recency(&app) {
+        if other.label() != window.label() {
+            let _ = app.emit_to(other.label(), "mdcat://gather", window.label());
+        }
+    }
+}
+
+/// Actualiza el título de la ventana con el documento activo.
+#[tauri::command]
+fn set_window_title(window: WebviewWindow, title: String) {
+    let _ = window.set_title(&title);
+}
+
+/// Cierra la ventana que llama (por ejemplo, al quedarse sin pestañas tras moverlas).
+#[tauri::command]
+fn close_current_window(window: WebviewWindow) {
+    let _ = window.close();
 }
 
 /// Obtiene la marca de tiempo de última modificación del archivo en milisegundos Unix.
@@ -140,8 +355,13 @@ pub struct EdgeVoiceDescriptor {
 }
 
 /// Obtiene el catálogo de voces neuronales de Microsoft Edge filtrado y ordenado
+/// La consulta va por internet: se hace fuera del hilo principal para no congelar el arranque.
 #[tauri::command]
-fn get_edge_voices() -> Vec<EdgeVoiceDescriptor> {
+async fn get_edge_voices() -> Vec<EdgeVoiceDescriptor> {
+    off_main_thread(|| Ok(fetch_edge_voices())).await.unwrap_or_default()
+}
+
+fn fetch_edge_voices() -> Vec<EdgeVoiceDescriptor> {
     // Si podemos consultar la lista en línea, filtramos español e inglés
     if let Ok(voices) = msedge_tts::voice::get_voices_list() {
         let mut filtered: Vec<EdgeVoiceDescriptor> = voices
@@ -272,7 +492,11 @@ fn get_edge_voices() -> Vec<EdgeVoiceDescriptor> {
 
 /// Sintetiza un texto usando la voz neuronal de Microsoft Edge y devuelve el audio MP3 en Base64
 #[tauri::command]
-fn synthesize_edge_tts(text: String, voice: String, rate: f32) -> Result<String, String> {
+async fn synthesize_edge_tts(text: String, voice: String, rate: f32) -> Result<String, String> {
+    off_main_thread(move || synthesize_edge_tts_blocking(text, voice, rate)).await
+}
+
+fn synthesize_edge_tts_blocking(text: String, voice: String, rate: f32) -> Result<String, String> {
     use msedge_tts::tts::client::connect;
     use msedge_tts::tts::SpeechConfig;
 
@@ -422,6 +646,13 @@ fn main() {
             "--js-flags=\"--max-old-space-size=64 --lite-mode\""
         ].join(" ");
 
+        // En debug se conservan los argumentos del entorno (por ejemplo --remote-debugging-port para pruebas)
+        #[cfg(debug_assertions)]
+        let browser_args = match std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+            Ok(extra) if !extra.is_empty() => format!("{} {}", browser_args, extra),
+            _ => browser_args,
+        };
+
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", browser_args);
     }
 
@@ -440,6 +671,35 @@ fn main() {
     });
 
     tauri::Builder::default()
+        // Un solo proceso: abrir más archivos desde el Explorador los agrega como pestañas
+        // en la ventana usada más recientemente en vez de lanzar otra instancia.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            let paths = collect_document_paths(argv.into_iter().skip(1), Some(&cwd));
+            let registry = app.state::<WindowRegistry>();
+            if let Some(target) = registry.windows_by_recency(app).into_iter().next() {
+                if !paths.is_empty() {
+                    let _ = app.emit_to(target.label(), "mdcat://open-paths", paths);
+                }
+                let _ = target.unminimize();
+                let _ = target.set_focus();
+            }
+        }))
+        .manage(WindowRegistry::default())
+        .on_window_event(|window, event| {
+            let registry = window.state::<WindowRegistry>();
+            match event {
+                WindowEvent::Focused(true) => {
+                    let mut order = registry.focus_order.lock().unwrap();
+                    order.retain(|l| l != window.label());
+                    order.insert(0, window.label().to_string());
+                }
+                WindowEvent::Destroyed => {
+                    registry.focus_order.lock().unwrap().retain(|l| l != window.label());
+                    registry.pending_tabs.lock().unwrap().remove(window.label());
+                }
+                _ => {}
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             parse_markdown,
             read_and_parse_file,
@@ -451,7 +711,14 @@ fn main() {
             save_file_dialog,
             save_markdown_file,
             save_markdown_dialog,
-            get_cli_argument,
+            get_cli_paths,
+            take_pending_tabs,
+            list_other_windows,
+            move_tabs_to_window,
+            drop_tab_at_cursor,
+            gather_windows_into,
+            set_window_title,
+            close_current_window,
             get_file_mtime,
             get_edge_voices,
             synthesize_edge_tts

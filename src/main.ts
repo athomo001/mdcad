@@ -13,6 +13,7 @@ import { DiagramRenderer } from './diagrams';
 import { TtsManager } from './tts';
 import { I18nManager } from './i18n';
 import { AnnotationManager } from './annotations';
+import { TabStrip, TabMenuItem } from './tabs';
 
 // Tipos de dominio del sistema
 export type VisualTheme = 'blanco' | 'negro' | 'rosa' | 'verde-dorado';
@@ -38,6 +39,30 @@ export interface ProcessedDocument {
   toc: TocItem[];
   ast_html: string;
   metrics: ReadingMetrics;
+}
+
+/** Estado serializable de una pestaña; viaja tal cual entre ventanas al separarlas o unirlas. */
+export interface TabSnapshot {
+  path: string | null;
+  title: string;
+  raw: string;
+  dirty: boolean;
+  scrollTop: number;
+  /** Cápsula .mdbin descifrada en memoria: nunca se guarda ni se recarga sobre su ruta. */
+  encrypted: boolean;
+  doc: ProcessedDocument | null;
+}
+
+interface DocTab extends TabSnapshot {
+  id: string;
+  mtime: number | null;
+  /** Documento de bienvenida intacto: se reemplaza al abrir el primer archivo. */
+  welcome: boolean;
+}
+
+export interface WindowSummary {
+  label: string;
+  title: string;
 }
 
 export interface MdbinEnvelope {
@@ -150,14 +175,14 @@ export class TauriBridge {
   }
 
   /**
-   * Abre el diálogo nativo de Windows (OpenFileDialog) vía Rust.
+   * Abre el diálogo nativo de Windows (OpenFileDialog) vía Rust; permite elegir varios archivos.
    */
-  static async openFileDialog(): Promise<string | null> {
+  static async openFileDialog(): Promise<string[]> {
     if (this.isTauriAvailable()) {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string | null>('open_file_dialog');
+      return await invoke<string[]>('open_file_dialog');
     }
-    return null;
+    return [];
   }
 
   /**
@@ -200,14 +225,87 @@ export class TauriBridge {
   }
 
   /**
-   * Obtiene la ruta del archivo pasado como argumento en la consola o apertura de Windows.
+   * Obtiene los archivos pasados como argumento en la consola o al abrir desde el Explorador.
+   * Solo la ventana principal recibe rutas.
    */
-  static async getCliArgument(): Promise<string | null> {
+  static async getCliPaths(): Promise<string[]> {
     if (this.isTauriAvailable()) {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string | null>('get_cli_argument');
+      return await invoke<string[]>('get_cli_paths');
     }
-    return null;
+    return [];
+  }
+
+  // --- Ventanas y pestañas --------------------------------------------------
+
+  static async getWindowLabel(): Promise<string> {
+    if (!this.isTauriAvailable()) return 'main';
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    return getCurrentWebviewWindow().label;
+  }
+
+  /** Pestañas con las que debe arrancar una ventana creada al separar una pestaña. */
+  static async takePendingTabs(): Promise<TabSnapshot[]> {
+    if (!this.isTauriAvailable()) return [];
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<TabSnapshot[]>('take_pending_tabs');
+  }
+
+  static async listOtherWindows(): Promise<WindowSummary[]> {
+    if (!this.isTauriAvailable()) return [];
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<WindowSummary[]>('list_other_windows');
+  }
+
+  static async moveTabsToWindow(target: string, tabs: TabSnapshot[]): Promise<void> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('move_tabs_to_window', { target, tabs });
+  }
+
+  /**
+   * Entrega la pestaña a la ventana bajo el cursor o a una ventana nueva.
+   * Devuelve la etiqueta destino, o null si la pestaña se queda aquí.
+   */
+  static async dropTabAtCursor(tab: TabSnapshot, allowNewWindow: boolean, onlyNewWindow = false): Promise<string | null> {
+    if (!this.isTauriAvailable()) return null;
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<string | null>('drop_tab_at_cursor', { tab, allowNewWindow, onlyNewWindow });
+  }
+
+  static async gatherWindowsInto(): Promise<void> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('gather_windows_into');
+  }
+
+  static async setWindowTitle(title: string): Promise<void> {
+    document.title = title;
+    if (this.isTauriAvailable()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_window_title', { title });
+    }
+  }
+
+  static async closeCurrentWindow(): Promise<void> {
+    if (this.isTauriAvailable()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('close_current_window');
+    }
+  }
+
+  /** Escucha un evento dirigido a esta ventana (emitido desde Rust con `emit_to`). */
+  static async onWindowEvent<T>(event: string, handler: (payload: T) => void): Promise<void> {
+    if (!this.isTauriAvailable()) return;
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    await getCurrentWebviewWindow().listen<T>(event, (e) => handler(e.payload));
+  }
+
+  /** Archivos soltados desde el Explorador de Windows sobre la ventana. */
+  static async onFileDrop(handler: (paths: string[]) => void): Promise<void> {
+    if (!this.isTauriAvailable()) return;
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    await getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === 'drop') handler(e.payload.paths);
+    });
   }
 
   /**
@@ -275,6 +373,41 @@ export class TauriBridge {
   }
 }
 
+/** Documento de bienvenida que se muestra cuando no hay archivos abiertos. */
+const WELCOME_MARKDOWN = `# MDCAT Extended
+Lector y visor de Markdown ultraliviano de nueva generación para Windows.
+
+> [!NOTE]
+> Parseo nativo zero-copy en Rust a más de 100.000 líneas en milisegundos, 4 temas de color de alto contraste, lectura con síntesis de voz neuronal y vigilancia automática de archivos en tiempo real.
+
+## Primeros Pasos
+- Abre cualquier archivo Markdown presionando **Ctrl + O** o arrástralo directamente a esta ventana. Cada archivo se abre en su propia pestaña.
+- Arrastra una pestaña fuera de la ventana para separarla, o suéltala sobre otra ventana de MDCAT para unirlas.
+- Si editas tu archivo en cualquier editor externo (como Notepad o VS Code) y lo guardas, **MDCAT se actualiza automáticamente al instante**.
+- Presiona **F5** en cualquier momento para recargar el archivo abierto desde el disco sin perder tu posición de lectura.
+- Presiona **Ctrl + K** para desplegar la paleta de comandos rápida.
+- Presiona **F7** para abrir la barra de lectura en voz alta (Text-to-Speech) con voces neuronales de alta fidelidad.
+
+## Atajos de Teclado
+| Atajo | Función |
+| :--- | :--- |
+| **Ctrl + O** | Abrir documento Markdown o cápsula .mdbin |
+| **Ctrl + W** | Cerrar la pestaña actual |
+| **Ctrl + Tab** / **Ctrl + Shift + Tab** | Pestaña siguiente / anterior |
+| **F5** / **Ctrl + R** | Recargar documento actual desde el disco |
+| **F7** | Activar / Ocultar barra de voz (TTS) |
+| **F8** | Alternar Modo Enfoque (atenuar párrafos secundarios) |
+| **F9** | Alternar Modo Máquina de Escribir (centrado al 50vh) |
+| **F10** | Alternar Lectura Biónica (fijación sacádica) |
+| **Ctrl + P** | Exportar a PDF limpio e imprimir |
+| **Ctrl + K** | Paleta de comandos interactiva |
+`;
+
+/** Nombre de archivo de una ruta de Windows o POSIX. */
+function fileNameOf(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
 // -----------------------------------------------------------------------------
 // 3. Aplicación Principal de Escritorio
 // -----------------------------------------------------------------------------
@@ -310,6 +443,13 @@ class App {
   private currentFilePath: string | null = null;
   private lastFileMtime: number | null = null;
   private fileWatchTimer: number | null = null;
+
+  // Pestañas de documentos: la vista muestra siempre la activa y las demás guardan su estado
+  private tabs: DocTab[] = [];
+  private activeTabId: string | null = null;
+  private nextTabId = 1;
+  private tabStrip: TabStrip | null = null;
+  private windowLabel = 'main';
 
   async init(): Promise<void> {
     this.themeManager.init();
@@ -351,55 +491,45 @@ class App {
     this.bindViewModeEvents();
     this.bindSplitGutterEvents();
     this.bindEvents();
+    this.bindTabStrip();
     this.initSplash();
 
-    // 1. Comprobar si se abrió pasándole un archivo por CLI o doble clic en Windows
-    const cliFilePath = await TauriBridge.getCliArgument();
-    if (cliFilePath) {
-      await this.openDocumentByPath(cliFilePath);
+    this.windowLabel = await TauriBridge.getWindowLabel();
+    await this.bindWindowEvents();
+
+    // 0. Ventana creada al separar una pestaña: arranca con las pestañas que le entregaron
+    const pendingTabs = await TauriBridge.takePendingTabs();
+    if (pendingTabs.length > 0) {
+      pendingTabs.forEach((tab) => this.addTab(tab));
       return;
     }
 
-    // 2. Restaurar último archivo abierto si existe en el almacenamiento local
-    const lastOpened = localStorage.getItem('mdcat_last_opened_file');
-    if (lastOpened) {
-      try {
-        await this.openDocumentByPath(lastOpened);
-        return;
-      } catch (e) {
-        console.warn('El último archivo abierto ya no está disponible:', e);
-      }
+    // 1. Archivos pasados por CLI o con doble clic en Windows (uno o varios)
+    const cliPaths = await TauriBridge.getCliPaths();
+    if (cliPaths.length > 0) {
+      await this.openPaths(cliPaths);
+      if (this.tabs.length > 0) return;
+    }
+
+    // 2. Restaurar las pestañas de la última sesión de la ventana principal
+    if (this.windowLabel === 'main') {
+      const session = this.loadSession();
+      await this.openPaths(session.paths, true);
+      const activeTab = this.tabs.find((t) => t.path === session.active);
+      if (activeTab) await this.activateTab(activeTab.id);
+      if (this.tabs.length > 0) return;
     }
 
     // 3. Documento inicial sobrio y profesional
-    const cleanWelcomeDoc = `# MDCAT Extended
-Lector y visor de Markdown ultraliviano de nueva generación para Windows.
+    this.openWelcomeTab();
+  }
 
-> [!NOTE]
-> Parseo nativo zero-copy en Rust a más de 100.000 líneas en milisegundos, 4 temas de color de alto contraste, lectura con síntesis de voz neuronal y vigilancia automática de archivos en tiempo real.
-
-## Primeros Pasos
-- Abre cualquier archivo Markdown presionando **Ctrl + O** o arrástralo directamente a esta ventana.
-- Si editas tu archivo en cualquier editor externo (como Notepad o VS Code) y lo guardas, **MDCAT se actualiza automáticamente al instante**.
-- Presiona **F5** en cualquier momento para recargar el archivo abierto desde el disco sin perder tu posición de lectura.
-- Presiona **Ctrl + K** para desplegar la paleta de comandos rápida.
-- Presiona **F7** para abrir la barra de lectura en voz alta (Text-to-Speech) con voces neuronales de alta fidelidad.
-
-## Atajos de Teclado
-| Atajo | Función |
-| :--- | :--- |
-| **Ctrl + O** | Abrir documento Markdown o cápsula .mdbin |
-| **F5** / **Ctrl + R** | Recargar documento actual desde el disco |
-| **F7** | Activar / Ocultar barra de voz (TTS) |
-| **F8** | Alternar Modo Enfoque (atenuar párrafos secundarios) |
-| **F9** | Alternar Modo Máquina de Escribir (centrado al 50vh) |
-| **F10** | Alternar Lectura Biónica (fijación sacádica) |
-| **Ctrl + P** | Exportar a PDF limpio e imprimir |
-| **Ctrl + K** | Paleta de comandos interactiva |
-`;
-
-    this.currentRawMarkdown = cleanWelcomeDoc;
-    await this.renderContent(cleanWelcomeDoc);
+  private openWelcomeTab(): void {
+    const isEn = this.i18nManager.getLocale() === 'en';
+    this.addTab(
+      { path: null, title: isEn ? 'Welcome' : 'Bienvenida', raw: WELCOME_MARKDOWN, dirty: false, scrollTop: 0, encrypted: false, doc: null },
+      { welcome: true }
+    );
   }
 
   private initSplash(): void {
@@ -412,7 +542,312 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
     }, 850);
   }
 
+  // ---------------------------------------------------------------------------
+  // Pestañas de documentos
+  // ---------------------------------------------------------------------------
+
+  private bindTabStrip(): void {
+    const root = document.getElementById('tab-strip');
+    if (!root) return;
+    this.tabStrip = new TabStrip(root, {
+      activate: (id) => void this.activateTab(id),
+      close: (id) => this.closeTab(id),
+      reorder: (id, toIndex) => this.reorderTab(id, toIndex),
+      dropOutsideWindow: (id) => void this.dropTabOutsideWindow(id),
+      menuItems: (id) => this.tabMenuItems(id),
+      newTab: () => void this.handleOpenNativeFileDialog(),
+    });
+  }
+
+  /** Eventos que Rust envía a esta ventana: archivos abiertos desde fuera y pestañas movidas. */
+  private async bindWindowEvents(): Promise<void> {
+    await TauriBridge.onWindowEvent<string[]>('mdcat://open-paths', (paths) => void this.openPaths(paths));
+    await TauriBridge.onWindowEvent<TabSnapshot[]>('mdcat://tab-incoming', (tabs) => {
+      tabs.forEach((tab) => this.addTab(tab));
+    });
+    await TauriBridge.onWindowEvent<string>('mdcat://gather', (target) => void this.sendAllTabsTo(target));
+    await TauriBridge.onFileDrop((paths) => {
+      const docs = paths.filter((p) => /\.(md|markdown|mdbin)$/i.test(p));
+      void this.openPaths(docs);
+    });
+  }
+
+  private getActiveTab(): DocTab | null {
+    return this.tabs.find((t) => t.id === this.activeTabId) ?? null;
+  }
+
+  /** Agrega una pestaña y la activa. La bienvenida intacta se reemplaza en lugar de acumularse. */
+  private addTab(snapshot: TabSnapshot, options: { welcome?: boolean; mtime?: number | null } = {}): void {
+    const tab: DocTab = { ...snapshot, id: `tab-${this.nextTabId++}`, mtime: options.mtime ?? null, welcome: options.welcome ?? false };
+    const active = this.getActiveTab();
+    if (active?.welcome && !this.isDirty) {
+      this.tabs.splice(this.tabs.indexOf(active), 1, tab);
+      this.activeTabId = null;
+    } else {
+      this.tabs.push(tab);
+    }
+    void this.activateTab(tab.id);
+  }
+
+  private async activateTab(id: string): Promise<void> {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab || this.activeTabId === id) return;
+
+    this.captureActiveTab();
+    this.activeTabId = id;
+    this.renderTabs();
+    await this.loadTabIntoView(tab);
+    this.persistSession();
+  }
+
+  /** Guarda en la pestaña activa lo que hoy vive en la vista (edición, scroll, documento). */
+  private captureActiveTab(): void {
+    const tab = this.getActiveTab();
+    if (!tab) return;
+    if (this.editorDebounceTimer) {
+      clearTimeout(this.editorDebounceTimer);
+      this.editorDebounceTimer = null;
+    }
+    tab.raw = this.currentRawMarkdown;
+    tab.dirty = this.isDirty;
+    tab.doc = this.currentDoc;
+    tab.mtime = this.lastFileMtime;
+    tab.scrollTop = this.readerViewport?.scrollTop ?? 0;
+    if (tab.dirty) tab.welcome = false;
+  }
+
+  private async loadTabIntoView(tab: DocTab): Promise<void> {
+    this.stopFileWatcher();
+    const container = document.getElementById('markdown-content');
+    const bionicWasActive = BionicReader.isActive();
+    if (container) BionicReader.disable(container);
+
+    // Las cápsulas .mdbin no tienen ruta editable: guardar pide "Guardar como" para no pisar el cifrado
+    this.currentFilePath = tab.encrypted ? null : tab.path;
+    this.currentRawMarkdown = tab.raw;
+    this.lastFileMtime = tab.mtime;
+
+    if (!tab.doc) {
+      tab.doc = await TauriBridge.parseMarkdown(tab.raw);
+      if (tab.id !== this.activeTabId) return;
+    }
+    this.applyProcessedDocument(tab.doc);
+    if (container && bionicWasActive) BionicReader.enable(container);
+
+    if (this.rawEditorTextarea) {
+      this.rawEditorTextarea.value = tab.raw;
+    }
+    this.setDirty(tab.dirty);
+    this.updateEditorCounter();
+
+    const scrollTop = tab.scrollTop;
+    requestAnimationFrame(() => {
+      if (this.readerViewport) this.readerViewport.scrollTop = scrollTop;
+    });
+
+    if (this.currentFilePath) {
+      this.startFileWatcher(this.currentFilePath);
+    }
+    void TauriBridge.setWindowTitle(`${tab.title} — MDCAT Extended`);
+  }
+
+  private renderTabs(): void {
+    this.tabStrip?.render(
+      this.tabs.map((t) => ({
+        id: t.id,
+        title: t.title,
+        tooltip: t.path ?? t.title,
+        dirty: t.id === this.activeTabId ? this.isDirty : t.dirty,
+      })),
+      this.activeTabId
+    );
+  }
+
+  private closeTab(id: string): boolean {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab) return false;
+
+    const dirty = id === this.activeTabId ? this.isDirty : tab.dirty;
+    if (dirty) {
+      const isEn = this.i18nManager.getLocale() === 'en';
+      const question = isEn
+        ? `"${tab.title}" has unsaved changes. Close it anyway?`
+        : `"${tab.title}" tiene cambios sin guardar. ¿Cerrarla de todas formas?`;
+      if (!confirm(question)) return false;
+    }
+
+    this.removeTab(id);
+    if (this.tabs.length === 0) this.openWelcomeTab();
+    return true;
+  }
+
+  private closeOtherTabs(keepId: string): void {
+    for (const tab of this.tabs.filter((t) => t.id !== keepId)) {
+      this.closeTab(tab.id);
+    }
+  }
+
+  /** Quita la pestaña sin preguntar; si era la activa, activa la vecina. */
+  private removeTab(id: string): void {
+    const idx = this.tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    this.tabs.splice(idx, 1);
+
+    if (id === this.activeTabId) {
+      this.activeTabId = null;
+      this.stopFileWatcher();
+      const next = this.tabs[Math.min(idx, this.tabs.length - 1)];
+      if (next) void this.activateTab(next.id);
+    }
+    this.renderTabs();
+    this.persistSession();
+  }
+
+  private reorderTab(id: string, toIndex: number): void {
+    const idx = this.tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const [tab] = this.tabs.splice(idx, 1);
+    this.tabs.splice(Math.min(toIndex, this.tabs.length), 0, tab);
+    this.renderTabs();
+    this.persistSession();
+  }
+
+  private cycleTab(step: number): void {
+    if (this.tabs.length < 2) return;
+    const idx = this.tabs.findIndex((t) => t.id === this.activeTabId);
+    const next = this.tabs[(idx + step + this.tabs.length) % this.tabs.length];
+    void this.activateTab(next.id);
+  }
+
+  private snapshotTab(id: string): TabSnapshot | null {
+    if (id === this.activeTabId) this.captureActiveTab();
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab) return null;
+    const { path, title, raw, dirty, scrollTop, encrypted, doc } = tab;
+    return { path, title, raw, dirty, scrollTop, encrypted, doc };
+  }
+
+  /** La pestaña ya vive en otra ventana: se quita de aquí y, si no queda ninguna, se cierra la ventana. */
+  private detachLocalTab(id: string): void {
+    this.removeTab(id);
+    if (this.tabs.length === 0) {
+      void TauriBridge.closeCurrentWindow();
+    }
+  }
+
+  /** Pestaña soltada fuera de la ventana: se une a la ventana bajo el cursor o abre una nueva. */
+  private async dropTabOutsideWindow(id: string): Promise<void> {
+    const snapshot = this.snapshotTab(id);
+    if (!snapshot) return;
+    try {
+      // Con una sola pestaña no tiene sentido crear otra ventana: solo se permite unirla a otra
+      const target = await TauriBridge.dropTabAtCursor(snapshot, this.tabs.length > 1);
+      if (target) this.detachLocalTab(id);
+    } catch (err) {
+      console.error('No se pudo mover la pestaña:', err);
+    }
+  }
+
+  private async moveTabToNewWindow(id: string): Promise<void> {
+    const snapshot = this.snapshotTab(id);
+    if (!snapshot) return;
+    try {
+      const target = await TauriBridge.dropTabAtCursor(snapshot, true, true);
+      if (target) this.detachLocalTab(id);
+    } catch (err) {
+      console.error('No se pudo crear la ventana:', err);
+    }
+  }
+
+  private async moveTabToWindow(id: string, target: string): Promise<void> {
+    const snapshot = this.snapshotTab(id);
+    if (!snapshot) return;
+    try {
+      await TauriBridge.moveTabsToWindow(target, [snapshot]);
+      this.detachLocalTab(id);
+    } catch (err) {
+      console.error('No se pudo mover la pestaña:', err);
+    }
+  }
+
+  /** Otra ventana pidió unir todo en ella: se le entregan las pestañas y esta ventana se cierra. */
+  private async sendAllTabsTo(target: string): Promise<void> {
+    this.captureActiveTab();
+    const snapshots = this.tabs
+      .filter((t) => !t.welcome)
+      .map((t) => this.snapshotTab(t.id))
+      .filter((s): s is TabSnapshot => s !== null);
+    try {
+      if (snapshots.length > 0) await TauriBridge.moveTabsToWindow(target, snapshots);
+      this.tabs = [];
+      this.activeTabId = null;
+      await TauriBridge.closeCurrentWindow();
+    } catch (err) {
+      console.error('No se pudieron unir las ventanas:', err);
+    }
+  }
+
+  private async tabMenuItems(id: string): Promise<TabMenuItem[]> {
+    const isEn = this.i18nManager.getLocale() === 'en';
+    const others = await TauriBridge.listOtherWindows();
+    const single = this.tabs.length < 2;
+
+    return [
+      { label: isEn ? 'Close tab' : 'Cerrar pestaña', action: () => this.closeTab(id) },
+      { label: isEn ? 'Close other tabs' : 'Cerrar las demás pestañas', action: () => this.closeOtherTabs(id), disabled: single },
+      'separator',
+      { label: isEn ? 'Move to new window' : 'Mover a una ventana nueva', action: () => void this.moveTabToNewWindow(id), disabled: single || !TauriBridge.isTauriAvailable() },
+      ...others.map((w) => ({
+        label: `${isEn ? 'Move to' : 'Mover a'}: ${w.title}`,
+        action: () => void this.moveTabToWindow(id, w.label),
+      })),
+      'separator',
+      { label: isEn ? 'Merge all windows here' : 'Unir todas las ventanas aquí', action: () => void TauriBridge.gatherWindowsInto(), disabled: others.length === 0 },
+    ];
+  }
+
+  /** Abre varias rutas, cada una en su pestaña. Con `silent` no avisa de archivos que ya no existen. */
+  private async openPaths(paths: string[], silent = false): Promise<void> {
+    for (const path of paths) {
+      try {
+        await this.openDocumentByPath(path);
+      } catch (err) {
+        if (!silent) {
+          const isEn = this.i18nManager.getLocale() === 'en';
+          this.showToast(`${isEn ? '❌ Could not open' : '❌ No se pudo abrir'}: ${fileNameOf(path)}`);
+        }
+      }
+    }
+  }
+
+  /** Solo la ventana principal recuerda sus pestañas para la próxima vez. */
+  private persistSession(): void {
+    if (this.windowLabel !== 'main') return;
+    const paths = this.tabs.filter((t) => t.path && !t.encrypted).map((t) => t.path as string);
+    const active = this.getActiveTab();
+    try {
+      localStorage.setItem('mdcat_open_tabs', JSON.stringify({ paths, active: active?.path ?? null }));
+    } catch {}
+  }
+
+  private loadSession(): { paths: string[]; active: string | null } {
+    try {
+      const saved = JSON.parse(localStorage.getItem('mdcat_open_tabs') || 'null');
+      if (saved && Array.isArray(saved.paths)) return saved;
+    } catch {}
+    // Versiones anteriores solo recordaban un archivo
+    const legacy = localStorage.getItem('mdcat_last_opened_file');
+    return { paths: legacy ? [legacy] : [], active: legacy };
+  }
+
+  /** Abre un archivo en su propia pestaña; si ya está abierto, solo lo activa. */
   private async openDocumentByPath(path: string): Promise<void> {
+    const existing = this.tabs.find((t) => t.path !== null && t.path.toLowerCase() === path.toLowerCase());
+    if (existing) {
+      await this.activateTab(existing.id);
+      return;
+    }
+
     if (path.endsWith('.mdbin')) {
       try {
         const env = await TauriBridge.inspectMdbin(path);
@@ -420,31 +855,24 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
       } catch {
         this.openMdbinModal(path);
       }
-    } else {
+      return;
+    }
+
+    try {
+      const doc = await TauriBridge.readFile(path);
+
+      let raw = '';
       try {
-        const doc = await TauriBridge.readFile(path);
-        this.currentFilePath = path;
-        localStorage.setItem('mdcat_last_opened_file', path);
-        this.applyProcessedDocument(doc);
-
-        // Cargar contenido crudo en el editor
-        try {
-          const raw = await TauriBridge.readFileContent(path);
-          this.currentRawMarkdown = raw;
-          if (this.rawEditorTextarea) {
-            this.rawEditorTextarea.value = raw;
-            this.setDirty(false);
-            this.updateEditorCounter();
-          }
-        } catch (e) {
-          console.warn('No se pudo leer texto plano directo:', e);
-        }
-
-        this.startFileWatcher(path);
-      } catch (err) {
-        console.error('Error al abrir archivo por ruta:', err);
-        throw err;
+        raw = await TauriBridge.readFileContent(path);
+      } catch (e) {
+        console.warn('No se pudo leer texto plano directo:', e);
       }
+
+      const mtime = await TauriBridge.getFileMtime(path);
+      this.addTab({ path, title: fileNameOf(path), raw, dirty: false, scrollTop: 0, encrypted: false, doc }, { mtime });
+    } catch (err) {
+      console.error('Error al abrir archivo por ruta:', err);
+      throw err;
     }
   }
 
@@ -454,7 +882,7 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
   async reloadCurrentDocument(silent = false): Promise<void> {
     if (this.currentFilePath) {
       try {
-        const scrollPos = window.scrollY;
+        const scrollPos = this.readerViewport?.scrollTop ?? 0;
         const doc = await TauriBridge.readFile(this.currentFilePath);
         this.applyProcessedDocument(doc);
 
@@ -469,7 +897,7 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
           } catch {}
         }
 
-        window.scrollTo({ top: scrollPos, behavior: 'instant' });
+        if (this.readerViewport) this.readerViewport.scrollTop = scrollPos;
         this.lastFileMtime = await TauriBridge.getFileMtime(this.currentFilePath);
         if (!silent) {
           const isEn = this.i18nManager.getLocale() === 'en';
@@ -491,9 +919,12 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
    */
   private startFileWatcher(path: string): void {
     this.stopFileWatcher();
-    TauriBridge.getFileMtime(path).then((mtime) => {
-      this.lastFileMtime = mtime;
-    });
+    // Si la pestaña ya conocía su fecha, se conserva: así se detectan cambios hechos mientras estaba en segundo plano
+    if (this.lastFileMtime === null) {
+      TauriBridge.getFileMtime(path).then((mtime) => {
+        if (this.currentFilePath === path && this.lastFileMtime === null) this.lastFileMtime = mtime;
+      });
+    }
 
     this.fileWatchTimer = window.setInterval(async () => {
       if (!this.currentFilePath) return;
@@ -579,7 +1010,9 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
   }
 
   private setDirty(dirty: boolean): void {
+    const changed = this.isDirty !== dirty;
     this.isDirty = dirty;
+    if (changed) this.renderTabs();
     if (this.rawEditorBadge) {
       const isEn = this.i18nManager.getLocale() === 'en';
       if (dirty) {
@@ -747,7 +1180,17 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
         if (ok) {
           this.setDirty(false);
           this.lastFileMtime = Date.now();
-          const baseName = targetPath.split(/[\\/]/).pop();
+          const baseName = fileNameOf(targetPath);
+
+          // La pestaña pasa a representar el archivo recién guardado
+          const tab = this.getActiveTab();
+          if (tab) {
+            Object.assign(tab, { path: targetPath, title: baseName, encrypted: false, welcome: false });
+            this.renderTabs();
+            this.persistSession();
+            void TauriBridge.setWindowTitle(`${baseName} — MDCAT Extended`);
+          }
+          this.startFileWatcher(targetPath);
           this.showToast(isEn ? `✅ Document saved as: ${baseName}` : `✅ Documento guardado como: ${baseName}`);
         }
       }
@@ -1152,10 +1595,8 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
   }
 
   private async handleOpenNativeFileDialog(): Promise<void> {
-    const selectedPath = await TauriBridge.openFileDialog();
-    if (selectedPath) {
-      await this.openDocumentByPath(selectedPath);
-    }
+    const selectedPaths = await TauriBridge.openFileDialog();
+    await this.openPaths(selectedPaths);
   }
 
   private toggleBionicReading(): void {
@@ -1184,6 +1625,13 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
   }
 
   private async exportCurrentDocumentToMdbin(): Promise<void> {
+    // Las cápsulas abiertas solo traen el HTML renderizado, no el Markdown: no hay nada que volver a cifrar
+    if (!this.currentRawMarkdown.trim()) {
+      const isEn = this.i18nManager.getLocale() === 'en';
+      this.showToast(isEn ? 'This tab has no Markdown text to encrypt' : 'Esta pestaña no tiene texto Markdown para cifrar');
+      return;
+    }
+
     const savePath = await TauriBridge.saveFileDialog('documento_seguro.mdbin');
     if (!savePath) return;
 
@@ -1238,9 +1686,10 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
     }
 
     try {
-      const doc = await TauriBridge.readAndDecryptMdbin(this.pendingMdbinPath, password);
+      const path = this.pendingMdbinPath;
+      const doc = await TauriBridge.readAndDecryptMdbin(path, password);
       this.closeMdbinModal();
-      this.applyProcessedDocument(doc);
+      this.addTab({ path, title: fileNameOf(path), raw: '', dirty: false, scrollTop: 0, encrypted: true, doc });
     } catch (err: any) {
       if (errMsg) {
         errMsg.textContent = err?.toString() || 'Contraseña incorrecta o fallo de integridad.';
@@ -1300,7 +1749,13 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
 
     // 4. Atajos de Teclado Globales de Escritorio
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        if (this.activeTabId) this.closeTab(this.activeTabId);
+      } else if (e.ctrlKey && (e.key === 'Tab' || e.key === 'PageDown' || e.key === 'PageUp')) {
+        e.preventDefault();
+        this.cycleTab(e.key === 'PageUp' || (e.key === 'Tab' && e.shiftKey) ? -1 : 1);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         this.handleOpenNativeFileDialog();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
@@ -1343,19 +1798,15 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
       }
     });
 
-    // 5. Arrastrar y Soltar archivos del Explorador de Windows (Drag & Drop nativo)
+    // 5. Arrastrar y Soltar archivos. En escritorio Tauri entrega las rutas (ver bindWindowEvents);
+    // este manejador cubre el modo navegador, donde solo hay acceso al contenido.
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        const file = files[0];
-        const path = (file as any).path;
-        if (path) {
-          await this.openDocumentByPath(path);
-        } else if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
-          const text = await file.text();
-          await this.renderContent(text);
+      for (const file of Array.from(e.dataTransfer?.files ?? [])) {
+        if (/\.(md|markdown)$/i.test(file.name)) {
+          const raw = await file.text();
+          this.addTab({ path: null, title: file.name, raw, dirty: false, scrollTop: 0, encrypted: false, doc: null });
         }
       }
     });
@@ -1374,6 +1825,11 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
     document.getElementById('action-export-pdf')?.addEventListener('click', () => {
       this.closeMenus();
       this.annotationManager.exportToPdf();
+    });
+
+    document.getElementById('action-export-mdbin')?.addEventListener('click', () => {
+      this.closeMenus();
+      void this.exportCurrentDocumentToMdbin();
     });
 
     document.getElementById('action-close-app')?.addEventListener('click', () => {

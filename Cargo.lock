@@ -2292,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "mdcat-core"
-version = "1.1.1"
+version = "1.1.5"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2306,7 +2306,7 @@ dependencies = [
 
 [[package]]
 name = "mdcat-tauri"
-version = "1.1.1"
+version = "1.1.5"
 dependencies = [
  "mdcat-core",
  "msedge-tts",
@@ -2315,6 +2315,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-single-instance",
  "windows-sys 0.59.0",
 ]
 
@@ -4133,6 +4134,22 @@ dependencies = [
  "syn 2.0.119",
  "tauri-codegen",
  "tauri-utils",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "561cd99484561bc39c954768e7b41a66cebbe1ac3d9d081c34361f740c489e2c"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "windows-sys 0.61.2",
+ "zbus",
 ]
 
 [[package]]

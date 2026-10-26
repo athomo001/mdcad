@@ -7,6 +7,31 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.1.5] — 2026-10-26
+
+### Añadido (Added)
+- **Pestañas de documentos**:
+  - Cada archivo se abre en su propia pestaña, ya sea con `Ctrl + O` (ahora permite seleccionar varios archivos a la vez), arrastrándolo a la ventana, con doble clic en el Explorador o pasándolo por línea de comandos.
+  - Cada pestaña conserva sus cambios sin guardar (indicados con un punto), su posición de lectura y su recarga automática al cambiar el archivo en disco.
+  - Reordenamiento arrastrando; cierre con `✕`, clic central o `Ctrl + W`; navegación con `Ctrl + Tab` / `Ctrl + Shift + Tab`.
+  - La ventana principal recuerda las pestañas abiertas para la próxima sesión.
+- **Instancia única**: abrir otro archivo con MDCAT ya abierto lo agrega como pestaña en la última ventana usada, en vez de lanzar otra ventana.
+- **Separar y unir ventanas**:
+  - Arrastrar una pestaña fuera de la ventana la abre en una ventana nueva; soltarla sobre otra ventana de MDCAT la une a esa ventana.
+  - Menú contextual de pestaña: *Mover a una ventana nueva*, *Mover a: …*, *Unir todas las ventanas aquí*, *Cerrar las demás pestañas*.
+- **Exportar a `.mdbin` desde el menú**: nueva opción *Archivo → Exportar como cápsula cifrada .mdbin…* (antes solo existía en la paleta de comandos).
+
+### Corregido (Fixed)
+- **Lector de voz (TTS) empezaba por el final del documento**: los párrafos, listas y bloques de código fuera de pantalla quedaban excluidos de la lectura (solo se leían títulos y tablas), por lo que en documentos con pocos títulos la lectura saltaba al final. Ahora se leen todos los bloques en orden desde el inicio.
+- **Ventana en blanco o congelada**: la consulta del catálogo de voces, la síntesis de voz, la lectura de archivos grandes y el cifrado `.mdbin` corrían en el hilo de la ventana; con conexión lenta o documentos grandes la ventana quedaba en blanco. Ahora se ejecutan en segundo plano y la interfaz sigue respondiendo.
+- **Comunicación lenta con el núcleo de Rust**: la política de seguridad (CSP) bloqueaba el canal IPC rápido de Tauri y obligaba a usar el canal de respaldo. Se habilitó `ipc:` en `connect-src`.
+- **Arrastrar archivos desde el Explorador** ahora abre el archivo desde su ruta real (con recarga automática y guardado), y admite varios archivos a la vez.
+- **Recargar (`F5`) perdía la posición de lectura**: se restaura correctamente el desplazamiento del visor.
+- **Exportar a `.mdbin` una cápsula ya abierta** generaba un archivo vacío sin avisar; ahora se muestra un aviso.
+- **Lectura biónica** se mantiene activa al cambiar de pestaña en lugar de restaurar contenido del documento anterior.
+
+---
+
 ## [1.1.1] — 2026-10-25
 
 ### Corregido (Fixed)

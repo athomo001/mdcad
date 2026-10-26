@@ -508,6 +508,9 @@ export class TtsManager {
     const jumpLabel = isEn ? '📑 Jump to section...' : '📑 Saltar a sección...';
     let headingOptions = `<option value="">${jumpLabel}</option>`;
 
+    // Se usa textContent y no innerText: los hijos de .markdown-body tienen `content-visibility: auto`
+    // y Chromium devuelve innerText vacío para los bloques que aún no se han pintado (fuera de pantalla
+    // o recién insertados), lo que dejaba la lectura sólo con títulos y tablas.
     filteredNodes.forEach((node) => {
       let text = '';
       const isHeading = node.tagName.startsWith('H');
@@ -517,12 +520,12 @@ export class TtsManager {
       if (isTableRow) {
         // En tablas, unir las celdas con comas para lectura comprensible
         const cells = Array.from(node.querySelectorAll<HTMLElement>('td, th'))
-          .map((c) => c.innerText.trim())
+          .map((c) => (c.textContent || '').trim())
           .filter((t) => t.length > 0);
         text = cells.join(', ');
       } else if (isPre) {
         // En bloques de código o comandos de terminal
-        const lines = (node.innerText || '')
+        const lines = (node.textContent || '')
           .split('\n')
           .map((l) => l.trim())
           .filter((l) => l.length > 0);
@@ -532,7 +535,7 @@ export class TtsManager {
           text = lines.join(', ');
         }
       } else {
-        text = node.innerText?.trim() || '';
+        text = (node.textContent || '').replace(/\s+/g, ' ').trim();
       }
 
       if (text.length > 1) {

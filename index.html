@@ -46,6 +46,7 @@
         <button class="dropdown-action" id="action-open"><span data-i18n="menu.open">Abrir archivo Markdown...</span> <span class="shortcut-badge">Ctrl+O</span></button>
         <button class="dropdown-action" id="action-save-file"><span data-i18n="menu.saveFile">Guardar cambios</span> <span class="shortcut-badge">Ctrl+S</span></button>
         <button class="dropdown-action" id="action-export-pdf"><span data-i18n="menu.exportPdf">Exportar a PDF / Imprimir...</span> <span class="shortcut-badge">Ctrl+P</span></button>
+        <button class="dropdown-action" id="action-export-mdbin"><span data-i18n="menu.exportMdbin">Exportar como cápsula cifrada .mdbin...</span></button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-action" id="action-close-app" data-i18n="menu.close">Cerrar visor</button>
       </div>
@@ -101,6 +102,14 @@
       <button class="lang-chip" id="lang-toggle-btn" title="Cambiar Idioma (ES / EN)">ES</button>
     </div>
   </header>
+
+  <!-- =========================================================================
+       2.0 BARRA DE PESTAÑAS DE DOCUMENTOS
+       ========================================================================= -->
+  <nav class="tab-strip" id="tab-strip" aria-label="Documentos abiertos">
+    <div class="tab-list" id="tab-list" role="tablist"></div>
+    <button class="tab-new-btn" id="tab-new-btn" title="Abrir archivo (Ctrl+O)" data-i18n-title="tabs.openTitle">+</button>
+  </nav>
 
   <!-- =========================================================================
        2.1 BARRA FLOTANTE DE SÍNTESIS DE VOZ (TTS - Spec 09)
@@ -204,7 +213,7 @@
 
         <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;" data-i18n="about.title">MDCAT Extended</h2>
         <div style="display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-brand); background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); padding: 2px 8px; border-radius: 12px; margin-bottom: 8px;">
-          v1.1.1 • Alpha Release
+          v1.1.5 • Alpha Release
         </div>
         <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; padding: 0 10px;" data-i18n="about.tagline">
           Lector y analizador de Markdown de nueva generación, ultra liviano, seguro y optimizado para documentos masivos.

@@ -83,7 +83,7 @@ MDCAT Extended es una aplicación de escritorio para **leer, revisar y editar do
 
 - Cifrado **AES-256-GCM** con clave derivada mediante **Argon2id**.
 - El contenido descifrado vive solo en memoria y se borra (`zeroize`) al cerrar.
-- Cualquier `.md` se puede exportar a `.mdbin` desde la paleta de comandos.
+- Cualquier `.md` se puede exportar a `.mdbin` desde **Archivo → Exportar como cápsula cifrada .mdbin…** o desde la paleta de comandos (`Ctrl + K`).
 
 ## Atajos de teclado
 

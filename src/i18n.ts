@@ -37,6 +37,7 @@ export interface TranslationSchema {
     open: string;
     saveFile: string;
     exportPdf: string;
+    exportMdbin: string;
     close: string;
     view: string;
     viewLindo: string;
@@ -70,6 +71,9 @@ export interface TranslationSchema {
   toc: {
     title: string;
     empty: string;
+  };
+  tabs: {
+    openTitle: string;
   };
   tts: {
     play: string;
@@ -147,6 +151,7 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       open: 'Abrir archivo Markdown...',
       saveFile: 'Guardar cambios',
       exportPdf: 'Exportar a PDF / Imprimir...',
+      exportMdbin: 'Exportar como cápsula cifrada .mdbin...',
       close: 'Cerrar visor',
       view: 'Ver',
       viewLindo: 'Modo Lectura (Lindo)',
@@ -180,6 +185,9 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
     toc: {
       title: 'Contorno (TOC)',
       empty: 'Sin encabezados detectados',
+    },
+    tabs: {
+      openTitle: 'Abrir archivo en una pestaña nueva (Ctrl+O)',
     },
     tts: {
       play: 'Escuchar',
@@ -255,6 +263,7 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       open: 'Open Markdown file...',
       saveFile: 'Save changes',
       exportPdf: 'Export to PDF / Print...',
+      exportMdbin: 'Export as encrypted .mdbin capsule...',
       close: 'Close reader',
       view: 'View',
       viewLindo: 'Formatted View (Rich)',
@@ -288,6 +297,9 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
     toc: {
       title: 'Outline (TOC)',
       empty: 'No headings detected',
+    },
+    tabs: {
+      openTitle: 'Open file in a new tab (Ctrl+O)',
     },
     tts: {
       play: 'Listen',
