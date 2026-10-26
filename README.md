@@ -13,7 +13,7 @@ Núcleo en Rust · Interfaz en TypeScript sin frameworks · Binario único de ~5
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-10B981)](./LICENSE)
 ![Estado: alpha](https://img.shields.io/badge/estado-alpha-F59E0B)
 
-[Capturas](#capturas) · [Funciones](#funciones) · [Atajos](#atajos-de-teclado) · [Compilar](#compilación) · [Arquitectura](#arquitectura)
+[Capturas](#capturas) · [Funciones](#funciones) · [Atajos](#atajos-de-teclado) · [Descarga](#descarga-y-aviso-de-windows) · [Compilar](#compilación) · [Arquitectura](#arquitectura)
 
 <br />
 
@@ -102,6 +102,31 @@ MDCAT Extended es una aplicación de escritorio para **leer, revisar y editar do
 | `F10` | Lectura biónica |
 | `Alt + ↑` · `Alt + ↓` | Sección anterior / siguiente en TTS |
 | `Esc` | Cerrar ventanas y menús |
+
+## Descarga y aviso de Windows
+
+> [!WARNING]
+> Al abrir MDCAT por primera vez, Windows puede mostrar **"Windows protegió su PC"** (Microsoft Defender SmartScreen). **No es un virus**: el aviso aparece porque el ejecutable todavía no tiene firma digital.
+
+**¿Por qué sale?** SmartScreen revisa todo programa descargado de internet. Si el `.exe` no está firmado con un certificado de firma de código (un trámite pagado que identifica al publicador) y aún no lo han descargado suficientes personas, Windows lo marca como "aplicación no reconocida". No significa que haya detectado nada malicioso. Le pasa a casi cualquier programa nuevo de código abierto. Aplica al portable `.exe` y también a los instaladores `.msi` y `-setup.exe`.
+
+**Cómo abrirlo igual:**
+
+1. En el aviso, haz clic en **Más información**.
+2. Pulsa **Ejecutar de todas formas**.
+
+Solo hay que hacerlo la primera vez. Otra opción es hacer clic derecho en el `.exe` → **Propiedades** → marcar **Desbloquear** → **Aceptar**.
+
+**¿Cómo sé que es el original?** Descárgalo solo desde las [Releases de GitHub](https://github.com/cybeersecurity/mdcat/releases) y compara su huella SHA-256 con la publicada en la release:
+
+```powershell
+Get-FileHash .\MDCAT_Extended_*_Portable.exe -Algorithm SHA256
+```
+
+Si prefieres no confiar en ningún binario, el código fuente está completo en este repositorio y puedes [compilarlo tú mismo](#compilación). Lo que compilas en tu propio equipo no muestra el aviso, porque Windows no lo considera descargado.
+
+> [!NOTE]
+> MDCAT necesita **WebView2**, que ya viene incluido en Windows 11 y en Windows 10 actualizado. Si el portable no abre en un Windows 10 antiguo, instala el [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) o usa el instalador `-setup.exe`, que lo descarga automáticamente.
 
 ## Compilación
 
