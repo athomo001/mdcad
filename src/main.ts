@@ -828,12 +828,75 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
 
     tocList.innerHTML = '';
 
+    if (!tocItems || tocItems.length === 0) {
+      const emptyLi = document.createElement('li');
+      emptyLi.className = 'toc-empty-msg';
+      emptyLi.textContent = this.i18nManager.getLocale() === 'en' ? 'No headings found' : 'Sin encabezados';
+      tocList.appendChild(emptyLi);
+      return;
+    }
+
     const appendItems = (items: TocItem[], parent: HTMLElement) => {
       for (const item of items) {
-        const li = document.createElement('li');
-        li.className = `toc-item-wrapper level-${item.level}`;
+        const hasChildren = Boolean(item.children && item.children.length > 0);
 
-        // 1. Botón de reproducción AL COMIENZO de cada título
+        // 1. Nodo de lista que contiene la fila del título y su posible subárbol
+        const li = document.createElement('li');
+        li.className = `toc-node level-${item.level}`;
+
+        // 2. Fila visual interactiva aislada (evita bugs de flexbox y saltos de altura vertical)
+        const row = document.createElement('div');
+        row.className = `toc-item-row level-${item.level}`;
+        row.dataset.targetId = item.id;
+
+        // 3. Botón de alternar subsecciones o espaciador para alinear texto
+        if (hasChildren) {
+          const toggleBtn = document.createElement('button');
+          toggleBtn.className = 'toc-toggle-btn expanded';
+          toggleBtn.title = 'Alternar subsecciones';
+          toggleBtn.setAttribute('aria-label', `Alternar subsecciones de ${item.text}`);
+          toggleBtn.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+          toggleBtn.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const sublistEl = li.querySelector<HTMLElement>(':scope > .toc-sublist');
+            if (sublistEl) {
+              const isCollapsed = sublistEl.classList.toggle('collapsed');
+              toggleBtn.classList.toggle('expanded', !isCollapsed);
+              toggleBtn.classList.toggle('collapsed', isCollapsed);
+            }
+          };
+          row.appendChild(toggleBtn);
+        } else {
+          const spacer = document.createElement('span');
+          spacer.className = 'toc-toggle-spacer';
+          row.appendChild(spacer);
+        }
+
+        // 4. Enlace con el texto del título y anclaje suave
+        const a = document.createElement('a');
+        a.href = `#${item.id}`;
+        a.className = 'toc-link';
+        a.textContent = item.text;
+        a.title = item.text;
+        a.dataset.targetId = item.id;
+        a.onclick = (e) => {
+          e.preventDefault();
+          const target = document.getElementById(item.id);
+          if (target) {
+            const heading = (target.matches('h1, h2, h3, h4, h5, h6') ? target : target.closest('h1, h2, h3, h4, h5, h6')) || target;
+            heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setTimeout(() => {
+              heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 80);
+          }
+          if (this.ttsManager.isSpeaking() || this.ttsManager.isBarVisible()) {
+            this.ttsManager.playHeadingById(item.id);
+          }
+        };
+        row.appendChild(a);
+
+        // 5. Botón de síntesis de voz (TTS) al extremo derecho
         const ttsBtn = document.createElement('button');
         ttsBtn.className = 'toc-tts-play-btn';
         ttsBtn.title = `Escuchar desde "${item.text}"`;
@@ -852,41 +915,19 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
           }
           this.ttsManager.playHeadingById(item.id);
         };
+        row.appendChild(ttsBtn);
 
-        // 2. Enlace con el texto del título
-        const a = document.createElement('a');
-        a.href = `#${item.id}`;
-        a.className = `toc-link`;
-        a.textContent = item.text;
-        a.title = item.text;
-        a.dataset.targetId = item.id;
-        a.onclick = (e) => {
-          e.preventDefault();
-          const target = document.getElementById(item.id);
-          if (target) {
-            const heading = (target.matches('h1, h2, h3, h4, h5, h6') ? target : target.closest('h1, h2, h3, h4, h5, h6')) || target;
-            heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setTimeout(() => {
-              heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 80);
-          }
-          // Si el lector TTS está hablando o la barra está visible, saltar inmediatamente la lectura a este título
-          if (this.ttsManager.isSpeaking() || this.ttsManager.isBarVisible()) {
-            this.ttsManager.playHeadingById(item.id);
-          }
-        };
+        li.appendChild(row);
 
-        // El botón va al comienzo, a la izquierda del texto
-        li.appendChild(ttsBtn);
-        li.appendChild(a);
-        parent.appendChild(li);
-
-        if (item.children && item.children.length > 0) {
+        // 6. Si tiene hijos, se incrustan en su propia lista como bloque independiente
+        if (hasChildren && item.children) {
           const subList = document.createElement('ul');
           subList.className = 'toc-sublist';
           appendItems(item.children, subList);
           li.appendChild(subList);
         }
+
+        parent.appendChild(li);
       }
     };
 
@@ -906,9 +947,16 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const id = entry.target.id;
-            document.querySelectorAll('.toc-link').forEach((link) => {
-              const htmlLink = link as HTMLElement;
-              htmlLink.classList.toggle('active', htmlLink.dataset.targetId === id);
+            document.querySelectorAll<HTMLElement>('.toc-item-row').forEach((row) => {
+              const isActive = row.dataset.targetId === id;
+              row.classList.toggle('active', isActive);
+              const link = row.querySelector<HTMLElement>('.toc-link');
+              if (link) {
+                link.classList.toggle('active', isActive);
+              }
+              if (isActive) {
+                row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }
             });
           }
         });

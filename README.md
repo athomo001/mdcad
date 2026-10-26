@@ -129,9 +129,24 @@ npm install
 | :--- | :--- | :--- |
 | `npm run tauri dev` | Desarrollo con recarga en caliente | ventana de la app |
 | `npm run build:exe` | `.exe` portable rápido (perfil `release`, LTO *thin*) | `target\release\mdcat-tauri.exe` |
-| `npm run build:dist` | Binario final más pequeño (perfil `dist`) + instaladores MSI/NSIS | `target\dist\` |
-| `npm run build:msi` | Sube la versión (`-Minor`, `-Major`, `-SetVersion X.Y.Z`), compila `dist` y copia todo a `binarios\` | `binarios\` |
-| `npm run build:linux` | En Linux: binario + `.deb`, `.rpm` y `.AppImage` (`-- --fast` usa `release`) | `binarios/` |
+| `npm run build:dist` | Binario final optimizado (perfil `dist`) + instaladores MSI/NSIS | `target\dist\` |
+| `npm run build:msi` <br> `pwsh scripts/build-binarios.ps1` | Compila versión final `.exe` portable + instaladores `.msi` y `-setup.exe` y los copia directo a `binarios\` | `binarios\` |
+| `npm run build:linux` <br> `bash scripts/build-linux.sh` | En Linux: binario + `.deb`, `.rpm` y `.AppImage` (`-- --fast` usa `release`) | `binarios/` |
+
+#### Generación de ejecutables en Windows (`.exe` y `.msi`)
+
+Para compilar y empaquetar todos los binarios listos para distribución en la carpeta `binarios/`:
+
+```powershell
+# Todo en uno: .exe portable + instalador .msi + instalador -setup.exe:
+pwsh scripts/build-binarios.ps1
+
+# Equivalente vía npm:
+npm run build:msi
+
+# Solo el binario portable .exe rápido (sin instaladores):
+npm run build:exe
+```
 
 GitHub Actions (`.github/workflows/build.yml`) genera los builds de Windows y Linux al publicar un tag `v*` o al lanzarlo a mano.
 
@@ -174,6 +189,10 @@ graph LR
 - **Compilación rápida**: el perfil `release` usa LTO *thin* para iterar; `dist` reserva `opt-level = "z"` + LTO completo para el binario distribuido. El enlazador es `rust-lld` (`.cargo/config.toml`).
 
 
+
+## Historial de Cambios
+
+Consulta el archivo [CHANGELOG.md](./CHANGELOG.md) para revisar el detalle de versiones y mejoras de cada release.
 
 ## Licencia
 

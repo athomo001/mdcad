@@ -12,6 +12,7 @@
 
 /* 1. Tema BLANCO (Paper Light / Lectura Diurna Nítida) */
 [data-theme="blanco"] {
+  color-scheme: light;
   --bg-app: #FFFFFF;
   --bg-surface: #F8FAFC;
   --bg-surface-elevated: #F1F5F9;
@@ -26,10 +27,14 @@
   --code-border: #E2E8F0;
   --table-border: #E2E8F0;
   --table-stripe: #F8FAFC;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.16);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }
 
 /* 2. Tema NEGRO (OLED Black #000000 Puro / Descanso Visual) */
 [data-theme="negro"], :root:not([data-theme]) {
+  color-scheme: dark;
   --bg-app: #000000;
   --bg-surface: #0A0A0A;
   --bg-surface-elevated: #141414;
@@ -44,10 +49,14 @@
   --code-border: #30363D;
   --table-border: #21262D;
   --table-stripe: #0A0A0A;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
 }
 
 /* 3. Tema ROSA (Sakura / Cyber-Rose / Fondo Aterciopelado) */
 [data-theme="rosa"] {
+  color-scheme: dark;
   --bg-app: #120914;
   --bg-surface: rgba(30, 16, 32, 0.75);
   --bg-surface-elevated: #28142A;
@@ -62,10 +71,14 @@
   --code-border: rgba(244, 114, 182, 0.25);
   --table-border: rgba(244, 114, 182, 0.2);
   --table-stripe: rgba(30, 16, 32, 0.5);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(244, 114, 182, 0.22);
+  --scrollbar-thumb-hover: rgba(244, 114, 182, 0.42);
 }
 
 /* 4. Tema VERDE-DORADO (Emerald & Gold / Fondo Bosque con Oro Pulido) */
 [data-theme="verde-dorado"] {
+  color-scheme: dark;
   --bg-app: #05140E;
   --bg-surface: rgba(10, 31, 21, 0.75);
   --bg-surface-elevated: #113626;
@@ -81,4 +94,7 @@
   --code-border: rgba(212, 175, 55, 0.3);
   --table-border: rgba(212, 175, 55, 0.2);
   --table-stripe: rgba(10, 31, 21, 0.5);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(212, 175, 55, 0.25);
+  --scrollbar-thumb-hover: rgba(212, 175, 55, 0.45);
 }

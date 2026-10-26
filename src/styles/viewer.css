@@ -6,6 +6,32 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Scrollbars modernos estilo Studio (cero scrollbars blancos nativos) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body {
@@ -236,15 +262,16 @@ body {
 }
 
 .sidebar-toc {
-  width: 260px;
-  min-width: 260px;
+  width: 270px;
+  min-width: 270px;
   flex-shrink: 0;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 16px 12px;
+  overflow-x: hidden;
+  padding: 16px 8px;
   transition: transform 200ms ease, width 200ms ease;
   user-select: none;
 }
@@ -254,55 +281,126 @@ body {
 }
 
 .sidebar-header {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-muted);
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
   margin-bottom: 12px;
-  padding-left: 8px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.toc-list {
+.toc-list,
+.toc-sublist {
   list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.toc-link {
+.toc-node {
   display: block;
-  padding: 6px 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-radius: 6px;
-  transition: background 150ms, color 150ms;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
-.toc-link:hover {
-  color: var(--text-primary);
-}
-
-.toc-item-wrapper {
+/* Fila interactiva de cada título */
+.toc-item-row {
   display: flex;
   align-items: center;
   position: relative;
   width: 100%;
   border-radius: 6px;
-  padding: 1px 4px 1px 2px;
-  transition: background 150ms ease;
+  padding: 3px 6px 3px 4px;
+  transition: background 150ms ease, color 150ms ease;
   margin-bottom: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
-.toc-item-wrapper:hover {
-  background: rgba(255, 255, 255, 0.05);
+.toc-item-row:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.toc-item-wrapper.level-2 { padding-left: 14px; }
-.toc-item-wrapper.level-3 { padding-left: 24px; font-size: 12px; }
-.toc-item-wrapper.level-4 { padding-left: 32px; font-size: 12px; }
+[data-theme="blanco"] .toc-item-row:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
 
+/* Estado activo sincronizado con la lectura (ScrollSpy) */
+.toc-item-row.active {
+  background: var(--bg-surface-elevated);
+  box-shadow: inset 2px 0 0 var(--accent-brand);
+}
+
+.toc-item-row.active .toc-link {
+  color: var(--accent-brand);
+  font-weight: 600;
+}
+
+/* Botón discreto para colapsar o expandir subsecciones */
+.toc-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-right: 2px;
+  flex-shrink: 0;
+  transition: transform 150ms ease, color 150ms ease;
+  padding: 0;
+}
+
+.toc-toggle-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toc-toggle-btn.collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.toc-toggle-btn svg {
+  transition: transform 150ms ease;
+}
+
+/* Espaciador para nodos hoja (sin subsecciones) para alinear el texto verticalmente */
+.toc-toggle-spacer {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+/* Enlace con el texto del encabezado */
+.toc-link {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 4px;
+  transition: color 150ms ease;
+}
+
+.toc-item-row:hover .toc-link {
+  color: var(--text-primary);
+}
+
+/* Botón TTS (escuchar sección al tiro): discreto a la derecha, visible al hacer hover */
 .toc-tts-play-btn {
   display: inline-flex;
   align-items: center;
@@ -314,15 +412,15 @@ body {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 150ms ease, background 150ms, color 150ms, transform 120ms;
-  margin-right: 4px;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease, color 150ms ease, transform 120ms ease;
+  margin-left: 4px;
   flex-shrink: 0;
 }
 
-.toc-item-wrapper:hover .toc-tts-play-btn {
-  opacity: 1;
-  color: var(--accent-brand);
+.toc-item-row:hover .toc-tts-play-btn,
+.toc-tts-play-btn:focus-visible {
+  opacity: 0.7;
 }
 
 .toc-tts-play-btn:hover {
@@ -332,22 +430,24 @@ body {
   transform: scale(1.15);
 }
 
-.toc-item-wrapper .toc-link {
-  flex: 1;
-  min-width: 0;
-  display: block;
-  padding: 5px 4px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-radius: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Sublistas anidadas con guía vertical limpia */
+.toc-sublist {
+  padding-left: 12px;
+  margin-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+  transition: all 150ms ease;
 }
 
-.toc-item-wrapper .toc-link:hover {
-  color: var(--text-primary);
+.toc-sublist.collapsed {
+  display: none !important;
+}
+
+.toc-empty-msg {
+  padding: 16px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
 }
 
 /* --------------------------------------------------------------------------
@@ -1239,10 +1339,7 @@ body.bionic-mode .markdown-body li {
    -------------------------------------------------------------------------- */
 .toc-link.active {
   color: var(--accent-brand);
-  background: var(--bg-surface-elevated);
   font-weight: 600;
-  border-left: 2px solid var(--accent-brand);
-  padding-left: 8px;
 }
 
 /* --------------------------------------------------------------------------
