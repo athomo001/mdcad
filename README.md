@@ -6,6 +6,7 @@
 
 **Lector y editor de Markdown de escritorio, ligero y portable.**
 Núcleo en Rust · Interfaz en TypeScript sin frameworks · Binario único de ~5 MB
+Windows · macOS (Intel y Apple Silicon) · Linux
 
 [![Rust](https://img.shields.io/badge/Rust-1.75+-000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app/)
@@ -24,6 +25,8 @@ Núcleo en Rust · Interfaz en TypeScript sin frameworks · Binario único de ~5
 ## ¿Qué es?
 
 MDCAT Extended es una aplicación de escritorio para **leer, revisar y editar documentos Markdown**, desde notas cortas hasta manuales de más de 100.000 líneas. El parseo lo hace Rust (`pulldown-cmark`) vía Tauri v2 y la interfaz es TypeScript directo sobre el DOM, sin React, Vue ni Angular. El resultado es un `.exe` portable de ~5 MB que arranca al instante.
+
+El mismo código se compila para **Windows, macOS y Linux** sin cambios: basta con [compilarlo](#compilación) en el sistema donde lo vas a usar.
 
 ## Capturas
 
@@ -135,6 +138,7 @@ Si prefieres no confiar en ningún binario, el código fuente está completo en 
 - **Rust** 1.75+ ([rustup.rs](https://rustup.rs/))
 - **Node.js** 18+ y npm
 - **Windows**: Microsoft Visual C++ Build Tools
+- **macOS** (Intel o Apple Silicon): Xcode Command Line Tools (`xcode-select --install`)
 - **Linux (Debian/Ubuntu)**: WebKitGTK y dependencias. `./scripts/build-linux.sh --deps` las instala, o a mano:
 
   ```bash
@@ -173,11 +177,37 @@ npm run build:msi
 npm run build:exe
 ```
 
-GitHub Actions (`.github/workflows/build.yml`) genera los builds de Windows y Linux al publicar un tag `v*` o al lanzarlo a mano.
+#### Compilar en macOS (`.app` y `.dmg`)
+
+Funciona igual en Mac con Intel y con Apple Silicon (M1, M2, M3…); el binario sale nativo para la arquitectura del equipo donde compilas.
+
+```bash
+xcode-select --install                                  # compilador (clang), SDK de macOS y git; una sola vez
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"                               # o cierra y abre la terminal
+brew install node                                       # requiere Homebrew (brew.sh); o instala Node 18+ desde nodejs.org
+
+git clone https://github.com/athomo001/mdcad.git
+cd mdcad
+npm install
+npm run build:dist
+```
+
+La app queda en `target/dist/bundle/macos/MDCAT Extended.app` y el instalador en `target/dist/bundle/dmg/`. Arrastra la `.app` a **Aplicaciones**.
+
+> [!NOTE]
+>
+> - Lo que compilas en tu Mac abre sin avisos. Si copias la `.app` a otro Mac, Gatekeeper la bloqueará por no estar firmada; se desbloquea con `xattr -cr "/Applications/MDCAT Extended.app"`.
+> - Por ahora, abrir un `.md` con doble clic desde Finder arranca la app sin cargar el archivo. Ábrelo con `Cmd + O` o arrastrándolo a la ventana.
+> - Las voces locales del TTS son las de macOS; las voces neuronales de Edge funcionan igual que en Windows.
+
+GitHub Actions (`.github/workflows/build.yml`) genera los builds de Windows y Linux al publicar un tag `v*` o al lanzarlo a mano. El de macOS se compila en local con los pasos de arriba.
 
 ### Instaladores y asociación de archivos
 
 - **Windows**: MSI (WiX) y `-setup.exe` (NSIS) en español, con la licencia de `src-tauri/installer/licencia.txt`.
+- **macOS**: `.app` y `.dmg`.
+- **Linux**: `.deb`, `.rpm` y `.AppImage`.
 - Se registran `.md`, `.markdown`, `.mdown`, `.mkd` y `.mdbin` (en Linux, vía `MimeType` del `.desktop`).
 - En Windows 10/11, si ya había otra app predeterminada para `.md`, cámbiala a mano: clic derecho → *Abrir con* → *Elegir otra aplicación* → MDCAT Extended → *Usar siempre*.
 
