@@ -1,6 +1,7 @@
 // Oculta la ventana de consola negra en Windows para comportarse como app nativa GUI
 #![windows_subsystem = "windows"]
 
+use mdcat_core::text::{self, DecodedText};
 use mdcat_core::{MarkdownEngine, MdbinContainer, MdbinEnvelope, ProcessedDocument};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -101,22 +102,13 @@ async fn parse_markdown(content: String) -> Result<ProcessedDocument, String> {
     off_main_thread(move || Ok(MarkdownEngine::parse(&content))).await
 }
 
-/// Lee un archivo Markdown (.md o .markdown) del sistema de archivos local y lo parsea.
+/// Lee cualquier archivo de texto plano. Sin `encoding` detecta la codificación; con ella la fuerza
+/// ("reabrir con codificación"). Rechaza archivos binarios.
 #[tauri::command]
-async fn read_and_parse_file(path: String) -> Result<ProcessedDocument, String> {
+async fn read_text_file(path: String, encoding: Option<String>) -> Result<DecodedText, String> {
     off_main_thread(move || {
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))?;
-        Ok(MarkdownEngine::parse(&content))
-    })
-    .await
-}
-
-/// Lee el contenido en texto plano original de un archivo en disco.
-#[tauri::command]
-async fn read_file_content(path: String) -> Result<String, String> {
-    off_main_thread(move || {
-        std::fs::read_to_string(&path).map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))
+        let bytes = std::fs::read(&path).map_err(|e| format!("Error al leer el archivo '{}': {}", path, e))?;
+        text::decode(&bytes, encoding.as_deref()).map_err(|e| e.to_string())
     })
     .await
 }
@@ -130,15 +122,23 @@ fn inspect_mdbin_envelope(path: String) -> Result<MdbinEnvelope, String> {
         .map_err(|e| format!("Sobre MDBIN no válido: {}", e))
 }
 
+/// Cápsula descifrada: el Markdown permite editarla y volver a cifrarla al guardar.
+#[derive(serde::Serialize)]
+struct DecryptedDocument {
+    markdown: String,
+    doc: ProcessedDocument,
+}
+
 /// Descifra y parsea un archivo .mdbin autenticado con contraseña (Argon2id es costoso a propósito).
 #[tauri::command]
-async fn read_and_decrypt_mdbin(path: String, password: String) -> Result<ProcessedDocument, String> {
+async fn read_and_decrypt_mdbin(path: String, password: String) -> Result<DecryptedDocument, String> {
     off_main_thread(move || {
         let bytes = std::fs::read(&path)
             .map_err(|e| format!("No se pudo leer el archivo MDBIN '{}': {}", path, e))?;
         let markdown = MdbinContainer::unpack(&bytes, &password)
             .map_err(|e| format!("{}", e))?;
-        Ok(MarkdownEngine::parse(&markdown))
+        let doc = MarkdownEngine::parse(&markdown);
+        Ok(DecryptedDocument { markdown, doc })
     })
     .await
 }
@@ -156,12 +156,24 @@ async fn export_to_mdbin(path: String, markdown: String, password: String, hint:
     .await
 }
 
-/// Abre el diálogo nativo de Windows (OpenFileDialog) para seleccionar uno o varios archivos .md o .mdbin.
+/// Extensiones de texto plano frecuentes que ofrece el diálogo de abrir (cualquier archivo de texto
+/// se puede abrir igualmente con "Todos los archivos").
+const PLAIN_TEXT_EXTENSIONS: &[&str] = &[
+    "txt", "text", "log", "csv", "tsv", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf",
+    "xml", "html", "htm", "css", "js", "ts", "py", "rs", "go", "java", "c", "h", "cpp", "cs", "sh",
+    "ps1", "bat", "sql", "env", "rst", "adoc", "tex", "srt", "nfo",
+];
+
+/// Abre el diálogo nativo de Windows (OpenFileDialog) para seleccionar uno o varios documentos.
 #[tauri::command]
 fn open_file_dialog() -> Vec<String> {
+    let mut documents: Vec<&str> = vec!["md", "markdown", "mdown", "mkd", "mdbin"];
+    documents.extend_from_slice(PLAIN_TEXT_EXTENSIONS);
+
     let files = rfd::FileDialog::new()
-        .add_filter("Documentos Markdown y Cifrados", &["md", "markdown", "mdbin"])
-        .add_filter("Markdown (*.md, *.markdown)", &["md", "markdown"])
+        .add_filter("Documentos de texto, Markdown y cifrados", &documents)
+        .add_filter("Markdown (*.md, *.markdown)", &["md", "markdown", "mdown", "mkd"])
+        .add_filter("Texto plano (*.txt, *.log, *.csv, *.json...)", PLAIN_TEXT_EXTENSIONS)
         .add_filter("Cápsula Cifrada MDBIN (*.mdbin)", &["mdbin"])
         .add_filter("Todos los archivos (*.*)", &["*"])
         .set_title("Abrir documento en MDCAT Extended")
@@ -188,12 +200,11 @@ fn save_file_dialog(default_name: Option<String>) -> Option<String> {
     dialog.save_file().map(|p| p.to_string_lossy().to_string())
 }
 
-/// Guarda contenido Markdown de texto plano en la ruta de archivo especificada.
+/// Guarda texto en la ruta indicada con su codificación (UTF-8 si no se indica).
 #[tauri::command]
-fn save_markdown_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content)
-        .map_err(|e| format!("Error al guardar el archivo '{}': {}", path, e))?;
-    Ok(())
+fn save_text_file(path: String, content: String, encoding: Option<String>) -> Result<(), String> {
+    let bytes = text::encode(&content, encoding.as_deref().unwrap_or("UTF-8")).map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Error al guardar el archivo '{}': {}", path, e))
 }
 
 /// Abre el diálogo nativo de Windows para guardar un archivo Markdown (.md).
@@ -702,14 +713,13 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             parse_markdown,
-            read_and_parse_file,
-            read_file_content,
+            read_text_file,
             inspect_mdbin_envelope,
             read_and_decrypt_mdbin,
             export_to_mdbin,
             open_file_dialog,
             save_file_dialog,
-            save_markdown_file,
+            save_text_file,
             save_markdown_dialog,
             get_cli_paths,
             take_pending_tabs,

@@ -48,6 +48,7 @@ export interface TranslationSchema {
     typewriterMode: string;
     ttsBar: string;
     bionicMode: string;
+    dyslexiaFont: string;
     help: string;
     shortcuts: string;
     markdownGuide: string;
@@ -116,6 +117,43 @@ export interface TranslationSchema {
     decryptBtn: string;
     cancelBtn: string;
     error: string;
+    titleEncrypt: string;
+    descHint: string;
+    descEncrypt: string;
+    descEncryptFile: string;
+    newPasswordPlaceholder: string;
+    confirmLabel: string;
+    confirmPlaceholder: string;
+    hintLabel: string;
+    hintPlaceholder: string;
+    hintWarning: string;
+    showPassword: string;
+    hidePassword: string;
+    capsLock: string;
+    strength: [string, string, string, string, string];
+    encryptBtn: string;
+    busyDecrypt: string;
+    busyEncrypt: string;
+    emptyError: string;
+    mismatchError: string;
+    savedToast: string;
+    exportedToast: string;
+  };
+  encoding: {
+    buttonTitle: string;
+    reopenWith: string;
+    saveWith: string;
+    reopenHelp: string;
+    saveHelp: string;
+    reopenUnavailable: string;
+    lockedEncrypted: string;
+    discardConfirm: string;
+    reopenedToast: string;
+    savedToast: string;
+  };
+  readingAids: {
+    dyslexiaOn: string;
+    dyslexiaOff: string;
   };
 }
 
@@ -162,6 +200,7 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       typewriterMode: 'Modo Máquina de Escribir',
       ttsBar: 'Barra de Lectura de Voz (TTS)',
       bionicMode: 'Alternar Lectura Biónica',
+      dyslexiaFont: 'Fuente para Dislexia (OpenDyslexic)',
       help: 'Ayuda',
       shortcuts: 'Atajos y Comandos',
       markdownGuide: 'Guía de Sintaxis Markdown',
@@ -230,6 +269,43 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       decryptBtn: 'Descifrar Documento',
       cancelBtn: 'Cancelar',
       error: 'Contraseña incorrecta o el archivo ha sido alterado.',
+      titleEncrypt: 'Cifrar Cápsula MDBIN',
+      descHint: 'Documento protegido: {hint}. Ingresa la contraseña para descifrarlo en memoria.',
+      descEncrypt: 'El documento se cifrará con AES-256-GCM. Sin la contraseña no se podrá recuperar: guárdala en un lugar seguro.',
+      descEncryptFile: 'Se cifrará "{file}" con AES-256-GCM. Sin la contraseña no se podrá recuperar: guárdala en un lugar seguro.',
+      newPasswordPlaceholder: 'Elige una contraseña...',
+      confirmLabel: 'Confirmar contraseña:',
+      confirmPlaceholder: 'Repite la contraseña...',
+      hintLabel: 'Pista (opcional):',
+      hintPlaceholder: 'Ej.: Informe de auditoría Q3',
+      hintWarning: 'La pista queda visible sin contraseña: no escribas en ella nada confidencial.',
+      showPassword: 'Mostrar contraseña',
+      hidePassword: 'Ocultar contraseña',
+      capsLock: 'Bloq Mayús está activado',
+      strength: ['Muy débil', 'Débil', 'Aceptable', 'Buena', 'Fuerte'],
+      encryptBtn: 'Cifrar y Guardar',
+      busyDecrypt: 'Descifrando...',
+      busyEncrypt: 'Cifrando...',
+      emptyError: 'Escribe la contraseña.',
+      mismatchError: 'Las contraseñas no coinciden.',
+      savedToast: '🔒 Cápsula cifrada guardada',
+      exportedToast: '🔒 Cápsula cifrada guardada en: {file}',
+    },
+    encoding: {
+      buttonTitle: 'Codificación del documento: clic para reabrir o guardar con otra',
+      reopenWith: 'Reabrir con',
+      saveWith: 'Guardar con',
+      reopenHelp: 'Vuelve a leer el archivo del disco con otra codificación. Úsalo si ves caracteres extraños (Ã±, Ã©...).',
+      saveHelp: 'Guarda el documento convirtiéndolo a otra codificación.',
+      reopenUnavailable: 'El documento no tiene un archivo en disco',
+      lockedEncrypted: 'Las cápsulas .mdbin siempre usan UTF-8',
+      discardConfirm: 'Hay cambios sin guardar. ¿Descartarlos y reabrir el archivo con otra codificación?',
+      reopenedToast: 'Reabierto como {encoding}',
+      savedToast: '✅ Guardado como {encoding}',
+    },
+    readingAids: {
+      dyslexiaOn: 'Fuente para dislexia activada',
+      dyslexiaOff: 'Fuente para dislexia desactivada',
     },
   },
   en: {
@@ -274,6 +350,7 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       typewriterMode: 'Typewriter Mode',
       ttsBar: 'Voice Reader Bar (TTS)',
       bionicMode: 'Toggle Bionic Reading',
+      dyslexiaFont: 'Dyslexia-Friendly Font (OpenDyslexic)',
       help: 'Help',
       shortcuts: 'Shortcuts & Commands',
       markdownGuide: 'Markdown Syntax Guide',
@@ -342,6 +419,43 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationSchema> = {
       decryptBtn: 'Decrypt Document',
       cancelBtn: 'Cancel',
       error: 'Incorrect password or file has been tampered with.',
+      titleEncrypt: 'Encrypt MDBIN Capsule',
+      descHint: 'Protected document: {hint}. Enter the password to decrypt it in memory.',
+      descEncrypt: 'The document will be encrypted with AES-256-GCM. It cannot be recovered without the password: keep it somewhere safe.',
+      descEncryptFile: '"{file}" will be encrypted with AES-256-GCM. It cannot be recovered without the password: keep it somewhere safe.',
+      newPasswordPlaceholder: 'Choose a password...',
+      confirmLabel: 'Confirm password:',
+      confirmPlaceholder: 'Repeat the password...',
+      hintLabel: 'Hint (optional):',
+      hintPlaceholder: 'E.g.: Q3 audit report',
+      hintWarning: 'The hint is readable without the password: do not put anything confidential in it.',
+      showPassword: 'Show password',
+      hidePassword: 'Hide password',
+      capsLock: 'Caps Lock is on',
+      strength: ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'],
+      encryptBtn: 'Encrypt and Save',
+      busyDecrypt: 'Decrypting...',
+      busyEncrypt: 'Encrypting...',
+      emptyError: 'Enter the password.',
+      mismatchError: 'Passwords do not match.',
+      savedToast: '🔒 Encrypted capsule saved',
+      exportedToast: '🔒 Encrypted capsule saved to: {file}',
+    },
+    encoding: {
+      buttonTitle: 'Document encoding: click to reopen or save with another one',
+      reopenWith: 'Reopen with',
+      saveWith: 'Save with',
+      reopenHelp: 'Reads the file from disk again with another encoding. Use it if you see garbled characters (Ã±, Ã©...).',
+      saveHelp: 'Saves the document converting it to another encoding.',
+      reopenUnavailable: 'The document has no file on disk',
+      lockedEncrypted: '.mdbin capsules always use UTF-8',
+      discardConfirm: 'There are unsaved changes. Discard them and reopen the file with another encoding?',
+      reopenedToast: 'Reopened as {encoding}',
+      savedToast: '✅ Saved as {encoding}',
+    },
+    readingAids: {
+      dyslexiaOn: 'Dyslexia-friendly font enabled',
+      dyslexiaOff: 'Dyslexia-friendly font disabled',
     },
   },
 };

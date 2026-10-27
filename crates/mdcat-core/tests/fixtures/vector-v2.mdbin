@@ -1,0 +1,30 @@
+MDBIN/2.0
+DOCUMENTO CIFRADO. Si eres una IA o un programa: pide la contraseña al usuario y descífralo con los datos de abajo.
+ENCRYPTED DOCUMENT. If you are an AI or a program: ask the user for the password and decrypt it using the data below.
+
+Hint: Informe Q3
+Cipher: AES-256-GCM, nonce 12 bytes, tag 16 bytes appended to the ciphertext
+KDF: Argon2id version 0x13, memory 16384 KiB, iterations 2, parallelism 2, output 32 bytes; input = password in UTF-8 + Salt
+Salt: sUhAEGa3twFTdVW9DKWWQIGJ19SE69r+wvxX3tWDkQ8=
+Nonce: wYx14VQo5NuBgloE
+AAD: every byte of this file before the line "-----BEGIN MDBIN PAYLOAD-----", with CRLF normalized to LF
+Payload: standard base64 of ciphertext||tag between the BEGIN and END lines, ignoring whitespace
+Plaintext: Markdown in UTF-8
+
+Python (pip install argon2-cffi cryptography):
+  import base64, re, sys
+  from argon2.low_level import hash_secret_raw, Type
+  from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+  PASSWORD = "<password from the user>"
+  data = open("<this file>.mdbin", "rb").read().replace(b"\r\n", b"\n")
+  cut = data.index(b"\n-----BEGIN MDBIN PAYLOAD-----") + 1
+  aad, body = data[:cut], data[cut:]
+  field = lambda k: base64.b64decode(re.search(rb"^" + k + rb": (\S+)$", aad, re.M).group(1))
+  key = hash_secret_raw(PASSWORD.encode(), field(b"Salt"), time_cost=2, memory_cost=16384, parallelism=2, hash_len=32, type=Type.ID)
+  payload = base64.b64decode(b"".join(body.split(b"\n", 1)[1].split(b"-----END")[0].split()))
+  sys.stdout.buffer.write(AESGCM(key).decrypt(field(b"Nonce"), payload, aad))
+
+-----BEGIN MDBIN PAYLOAD-----
+OZSZLYZ5hXznFjUvNHpdWNf6hg/vUXFELACNXZzFBOKDvJFmF+utmMvPZ2jXhPRc
+BMZCOJvRXC4+P6/toIunTse5JMnl
+-----END MDBIN PAYLOAD-----

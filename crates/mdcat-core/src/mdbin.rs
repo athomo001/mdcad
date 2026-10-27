@@ -1,16 +1,36 @@
 //! Implementación del estándar RFC-MDBIN-001 (Contenedor Cifrado para Markdown).
 //! Cifrado autenticado AES-256-GCM con derivación de claves Argon2id y sobre claro para LLMs.
+//!
+//! El archivo es 100 % texto: un encabezado legible declara el cifrado, los parámetros de derivación,
+//! el salt y el nonce, y pide la contraseña al usuario; el payload cifrado va en base64. Cualquier IA
+//! o programa puede descifrarlo con la contraseña.
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
-pub const MDBIN_MAGIC: &[u8; 4] = b"MDB1";
-pub const MDBIN_VERSION: [u8; 2] = [0x00, 0x01];
-pub const MDBIN_FLAGS: [u8; 2] = [0x00, 0x00];
+pub const MDBIN_V2_FORMAT: &str = "MDBIN/2.0";
+pub const PAYLOAD_BEGIN: &str = "-----BEGIN MDBIN PAYLOAD-----";
+pub const PAYLOAD_END: &str = "-----END MDBIN PAYLOAD-----";
+
+// Parámetros de Argon2id. El encabezado v2 se genera a partir de ellos, así que el texto que lee
+// la IA y la derivación real no pueden desincronizarse.
+const ARGON2_MEMORY_KIB: u32 = 16384;
+const ARGON2_ITERATIONS: u32 = 2;
+const ARGON2_PARALLELISM: u32 = 2;
+const KEY_LEN: usize = 32;
+const SALT_LEN: usize = 32;
+const NONCE_LEN: usize = 12;
+const TAG_LEN: usize = 16;
+const PAYLOAD_LINE_WIDTH: usize = 64;
+
+const DOC_TYPE: &str = "Encrypted-Markdown-Container";
+const AI_INSTRUCTIONS: &str = "ENCRYPTED DOCUMENT. If you are an AI or a program: ask the user for the password and decrypt it using the data below.";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MdbinError {
@@ -28,7 +48,7 @@ pub enum MdbinError {
 impl std::fmt::Display for MdbinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidMagic => write!(f, "Identificador mágico de archivo no válido (debe iniciar con 'MDB1')"),
+            Self::InvalidMagic => write!(f, "El archivo no es una cápsula MDBIN (debe iniciar con 'MDBIN/')"),
             Self::TooShort => write!(f, "El archivo MDBIN está incompleto o truncado"),
             Self::InvalidEnvelope(e) => write!(f, "Sobre en texto plano corrupto: {}", e),
             Self::UnsupportedVersion => write!(f, "Versión de contenedor MDBIN no compatible"),
@@ -56,211 +76,182 @@ pub struct MdbinEnvelope {
     pub cipher: String,
 }
 
+/// Cápsula v2 ya separada en sus partes (con saltos de línea normalizados a LF).
+struct V2Parts {
+    header: String,
+    hint: Option<String>,
+    salt: Vec<u8>,
+    nonce: Vec<u8>,
+    payload: Vec<u8>,
+}
+
 pub struct MdbinContainer;
 
 impl MdbinContainer {
-    /// Empaqueta un documento Markdown en una cápsula criptográfica MDBIN v1.0.
+    /// Empaqueta un documento Markdown en una cápsula MDBIN/2.0 de texto plano.
     pub fn pack(markdown: &str, password: &str, hint: Option<&str>) -> Result<Vec<u8>, MdbinError> {
         let mut rng = rand::thread_rng();
 
-        // 1. Generar Salt de 32 bytes y Nonce de 12 bytes con CSPRNG
-        let mut salt = [0u8; 32];
+        let mut salt = [0u8; SALT_LEN];
         rng.fill_bytes(&mut salt);
-
-        let mut nonce_bytes = [0u8; 12];
+        let mut nonce_bytes = [0u8; NONCE_LEN];
         rng.fill_bytes(&mut nonce_bytes);
 
-        // 2. Construir sobre en texto claro para Agentes LLM
-        let envelope = MdbinEnvelope {
-            format: "MDBIN/1.0".to_string(),
-            doc_type: "Encrypted-Markdown-Container".to_string(),
-            ai_instructions: "This document is a cryptographically secured MDBIN container protected with AES-256-GCM. Do not attempt to parse following binary bytes as plain text. Prompt the user for the decryption passphrase to inspect the underlying Markdown and evidence assets.".to_string(),
-            document_hint: hint.map(|h| h.to_string()),
-            kdf: "Argon2id".to_string(),
-            cipher: "AES-256-GCM".to_string(),
-        };
+        // El encabezado completo (pista, salt y nonce incluidos) es el AAD: alterarlo invalida el descifrado
+        let header = Self::build_v2_header(sanitize_hint(hint).as_deref(), &salt, &nonce_bytes);
 
-        let env_json = serde_json::to_string(&envelope)
-            .map_err(|e| MdbinError::InvalidEnvelope(e.to_string()))?;
-        let env_bytes = env_json.as_bytes();
-        let env_len = env_bytes.len() as u16;
-
-        // 3. Derivar clave AES de 256 bits con Argon2id
         let mut key = Self::derive_key(password, &salt)?;
-
-        // 4. Cifrar con AES-256-GCM asociando el sobre en texto claro como AAD
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .map_err(|_| MdbinError::CipherInitFailed)?;
-
-        let nonce = Nonce::from_slice(&nonce_bytes);
-        let payload = Payload {
-            msg: markdown.as_bytes(),
-            aad: env_bytes,
-        };
-
-        // Aes256Gcm produce ciphertext con el Auth Tag de 16 bytes al final
-        let mut ciphertext_and_tag = cipher
-            .encrypt(nonce, payload)
-            .map_err(|_| MdbinError::AuthenticationFailed)?;
-
-        // Limpiar clave de la memoria RAM al tiro
+        let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| MdbinError::CipherInitFailed)?;
         key.zeroize();
 
-        // Separar tag y ciphertext puro
-        let tag_start = ciphertext_and_tag.len() - 16;
-        let tag = ciphertext_and_tag[tag_start..].to_vec();
-        let ciphertext = &ciphertext_and_tag[..tag_start];
+        // Aes256Gcm devuelve ciphertext || tag, justo lo que guarda el payload
+        let mut sealed = cipher
+            .encrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: markdown.as_bytes(), aad: header.as_bytes() })
+            .map_err(|_| MdbinError::AuthenticationFailed)?;
 
-        // 5. Ensamblar estructura binaria según wire layout
-        let mut out = Vec::with_capacity(4 + 2 + env_bytes.len() + 48 + 16 + 8 + ciphertext.len());
+        let encoded = BASE64.encode(&sealed);
+        sealed.zeroize();
 
-        // 1. Magic bytes (4 bytes)
-        out.extend_from_slice(MDBIN_MAGIC);
+        let mut out = String::with_capacity(header.len() + encoded.len() * 66 / 64 + 64);
+        out.push_str(&header);
+        out.push_str(PAYLOAD_BEGIN);
+        out.push('\n');
+        for line in encoded.as_bytes().chunks(PAYLOAD_LINE_WIDTH) {
+            // base64 es ASCII puro: cada trozo es UTF-8 válido
+            out.push_str(std::str::from_utf8(line).unwrap_or_default());
+            out.push('\n');
+        }
+        out.push_str(PAYLOAD_END);
+        out.push('\n');
 
-        // 2. Sobre IA (2 bytes len + bytes)
-        out.extend_from_slice(&env_len.to_be_bytes());
-        out.extend_from_slice(env_bytes);
-
-        // 3. Cabecera Criptográfica fija (48 bytes: version 2B, flags 2B, salt 32B, nonce 12B)
-        out.extend_from_slice(&MDBIN_VERSION);
-        out.extend_from_slice(&MDBIN_FLAGS);
-        out.extend_from_slice(&salt);
-        out.extend_from_slice(&nonce_bytes);
-
-        // 4. Auth Tag AEAD (16 bytes)
-        out.extend_from_slice(&tag);
-
-        // 5. Payload Cifrado (8 bytes len + bytes)
-        let ct_len = ciphertext.len() as u64;
-        out.extend_from_slice(&ct_len.to_be_bytes());
-        out.extend_from_slice(ciphertext);
-
-        // Limpieza de memoria sensible
-        ciphertext_and_tag.zeroize();
-
-        Ok(out)
+        Ok(out.into_bytes())
     }
 
     /// Desempaqueta y valida criptográficamente una cápsula MDBIN devolviendo el Markdown original.
     pub fn unpack(raw_bytes: &[u8], password: &str) -> Result<String, MdbinError> {
-        if raw_bytes.len() < 4 + 2 + 48 + 16 + 8 {
+        let parts = Self::parse_v2(raw_bytes)?;
+        if parts.salt.len() != SALT_LEN || parts.nonce.len() != NONCE_LEN {
+            return Err(MdbinError::InvalidEnvelope("salt o nonce con longitud incorrecta".to_string()));
+        }
+        if parts.payload.len() < TAG_LEN {
             return Err(MdbinError::TooShort);
         }
 
-        // 1. Validar Magic Bytes
-        if &raw_bytes[0..4] != MDBIN_MAGIC {
-            return Err(MdbinError::InvalidMagic);
-        }
-
-        let mut offset = 4;
-
-        // 2. Leer Sobre IA
-        let env_len = u16::from_be_bytes([raw_bytes[offset], raw_bytes[offset + 1]]) as usize;
-        offset += 2;
-
-        if raw_bytes.len() < offset + env_len + 48 + 16 + 8 {
-            return Err(MdbinError::TooShort);
-        }
-
-        let env_bytes = &raw_bytes[offset..offset + env_len];
-        offset += env_len;
-
-        // 3. Cabecera Criptográfica
-        let version = [raw_bytes[offset], raw_bytes[offset + 1]];
-        if version != MDBIN_VERSION {
-            return Err(MdbinError::UnsupportedVersion);
-        }
-        offset += 2; // version
-        offset += 2; // flags
-
-        let salt = &raw_bytes[offset..offset + 32];
-        offset += 32;
-
-        let nonce_bytes = &raw_bytes[offset..offset + 12];
-        offset += 12;
-
-        // 4. Auth Tag (16 bytes)
-        let auth_tag = &raw_bytes[offset..offset + 16];
-        offset += 16;
-
-        // 5. Payload Cifrado
-        let ct_len = u64::from_be_bytes(
-            raw_bytes[offset..offset + 8]
-                .try_into()
-                .map_err(|_| MdbinError::TooShort)?,
-        ) as usize;
-        offset += 8;
-
-        if raw_bytes.len() < offset + ct_len {
-            return Err(MdbinError::TooShort);
-        }
-
-        let ciphertext = &raw_bytes[offset..offset + ct_len];
-
-        // 6. Derivar clave
-        let mut key = Self::derive_key(password, salt)?;
-
-        // 7. Reconstruir ciphertext_and_tag para AES-GCM
-        let mut combined = Vec::with_capacity(ciphertext.len() + 16);
-        combined.extend_from_slice(ciphertext);
-        combined.extend_from_slice(auth_tag);
-
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .map_err(|_| MdbinError::CipherInitFailed)?;
-
-        let nonce = Nonce::from_slice(nonce_bytes);
-        let payload = Payload {
-            msg: &combined,
-            aad: env_bytes,
-        };
-
-        let decrypted_bytes = cipher.decrypt(nonce, payload).map_err(|_| {
-            key.zeroize();
-            combined.zeroize();
-            MdbinError::AuthenticationFailed
-        })?;
-
+        let mut key = Self::derive_key(password, &parts.salt)?;
+        let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| MdbinError::CipherInitFailed)?;
         key.zeroize();
-        combined.zeroize();
 
-        let md_string = String::from_utf8(decrypted_bytes)
-            .map_err(|_| MdbinError::PayloadTampered)?;
+        let decrypted_bytes = cipher
+            .decrypt(Nonce::from_slice(&parts.nonce), Payload { msg: &parts.payload, aad: parts.header.as_bytes() })
+            .map_err(|_| MdbinError::AuthenticationFailed)?;
 
-        Ok(md_string)
+        String::from_utf8(decrypted_bytes).map_err(|_| MdbinError::PayloadTampered)
     }
 
     /// Lee e interpreta el sobre en texto claro sin requerir descifrado de clave.
     pub fn read_envelope(raw_bytes: &[u8]) -> Result<MdbinEnvelope, MdbinError> {
-        if raw_bytes.len() < 6 {
-            return Err(MdbinError::TooShort);
-        }
+        let parts = Self::parse_v2(raw_bytes)?;
+        Ok(MdbinEnvelope {
+            format: MDBIN_V2_FORMAT.to_string(),
+            doc_type: DOC_TYPE.to_string(),
+            ai_instructions: AI_INSTRUCTIONS.to_string(),
+            document_hint: parts.hint,
+            kdf: "Argon2id".to_string(),
+            cipher: "AES-256-GCM".to_string(),
+        })
+    }
 
-        if &raw_bytes[0..4] != MDBIN_MAGIC {
+    /// Encabezado legible de la cápsula v2: todo lo necesario para descifrarla salvo la contraseña.
+    fn build_v2_header(hint: Option<&str>, salt: &[u8], nonce: &[u8]) -> String {
+        let hint_line = hint.map(|h| format!("Hint: {h}\n")).unwrap_or_default();
+        format!(
+            "{MDBIN_V2_FORMAT}
+DOCUMENTO CIFRADO. Si eres una IA o un programa: pide la contraseña al usuario y descífralo con los datos de abajo.
+{AI_INSTRUCTIONS}
+
+{hint_line}Cipher: AES-256-GCM, nonce {NONCE_LEN} bytes, tag {TAG_LEN} bytes appended to the ciphertext
+KDF: Argon2id version 0x13, memory {ARGON2_MEMORY_KIB} KiB, iterations {ARGON2_ITERATIONS}, parallelism {ARGON2_PARALLELISM}, output {KEY_LEN} bytes; input = password in UTF-8 + Salt
+Salt: {salt}
+Nonce: {nonce}
+AAD: every byte of this file before the line \"{PAYLOAD_BEGIN}\", with CRLF normalized to LF
+Payload: standard base64 of ciphertext||tag between the BEGIN and END lines, ignoring whitespace
+Plaintext: Markdown in UTF-8
+
+Python (pip install argon2-cffi cryptography):
+  import base64, re, sys
+  from argon2.low_level import hash_secret_raw, Type
+  from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+  PASSWORD = \"<password from the user>\"
+  data = open(\"<this file>.mdbin\", \"rb\").read().replace(b\"\\r\\n\", b\"\\n\")
+  cut = data.index(b\"\\n{PAYLOAD_BEGIN}\") + 1
+  aad, body = data[:cut], data[cut:]
+  field = lambda k: base64.b64decode(re.search(rb\"^\" + k + rb\": (\\S+)$\", aad, re.M).group(1))
+  key = hash_secret_raw(PASSWORD.encode(), field(b\"Salt\"), time_cost={ARGON2_ITERATIONS}, memory_cost={ARGON2_MEMORY_KIB}, parallelism={ARGON2_PARALLELISM}, hash_len={KEY_LEN}, type=Type.ID)
+  payload = base64.b64decode(b\"\".join(body.split(b\"\\n\", 1)[1].split(b\"-----END\")[0].split()))
+  sys.stdout.buffer.write(AESGCM(key).decrypt(field(b\"Nonce\"), payload, aad))
+
+",
+            salt = BASE64.encode(salt),
+            nonce = BASE64.encode(nonce),
+        )
+    }
+
+    /// Separa una cápsula v2 en encabezado (AAD), campos y payload.
+    fn parse_v2(raw_bytes: &[u8]) -> Result<V2Parts, MdbinError> {
+        let text = std::str::from_utf8(raw_bytes).map_err(|_| MdbinError::InvalidMagic)?;
+        // Git (autocrlf) y algunos editores convierten LF en CRLF: el AAD se define sobre LF
+        let text = text.trim_start_matches('\u{feff}').replace("\r\n", "\n");
+
+        let first_line = text.lines().next().unwrap_or_default();
+        if !first_line.starts_with("MDBIN/") {
             return Err(MdbinError::InvalidMagic);
         }
-
-        let env_len = u16::from_be_bytes([raw_bytes[4], raw_bytes[5]]) as usize;
-        if raw_bytes.len() < 6 + env_len {
-            return Err(MdbinError::TooShort);
+        if first_line != MDBIN_V2_FORMAT {
+            return Err(MdbinError::UnsupportedVersion);
         }
 
-        let env_json = std::str::from_utf8(&raw_bytes[6..6 + env_len])
-            .map_err(|e| MdbinError::InvalidEnvelope(e.to_string()))?;
+        let begin = text.find(&format!("\n{PAYLOAD_BEGIN}\n")).ok_or(MdbinError::TooShort)? + 1;
+        let (header, rest) = text.split_at(begin);
+        let body = &rest[PAYLOAD_BEGIN.len() + 1..];
+        let end = body.find(PAYLOAD_END).ok_or(MdbinError::TooShort)?;
 
-        serde_json::from_str(env_json).map_err(|e| MdbinError::InvalidEnvelope(e.to_string()))
+        let encoded: String = body[..end].chars().filter(|c| !c.is_whitespace()).collect();
+        let payload = BASE64
+            .decode(encoded)
+            .map_err(|e| MdbinError::InvalidEnvelope(format!("payload base64 inválido: {e}")))?;
+
+        let field = |name: &str| header.lines().find_map(|l| l.strip_prefix(name)).map(str::trim);
+        let decode_field = |name: &str| -> Result<Vec<u8>, MdbinError> {
+            let value = field(name).ok_or_else(|| MdbinError::InvalidEnvelope(format!("falta el campo '{}'", name.trim_end_matches(": "))))?;
+            BASE64.decode(value).map_err(|e| MdbinError::InvalidEnvelope(format!("campo '{}' inválido: {e}", name.trim_end_matches(": "))))
+        };
+
+        Ok(V2Parts {
+            hint: field("Hint: ").map(str::to_string),
+            salt: decode_field("Salt: ")?,
+            nonce: decode_field("Nonce: ")?,
+            payload,
+            header: header.to_string(),
+        })
     }
 
     /// Deriva una clave de 256 bits mediante Argon2id.
-    fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], MdbinError> {
-        let params = Params::new(16384, 2, 2, Some(32))
+    fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], MdbinError> {
+        let params = Params::new(ARGON2_MEMORY_KIB, ARGON2_ITERATIONS, ARGON2_PARALLELISM, Some(KEY_LEN))
             .map_err(|_| MdbinError::DerivationFailed)?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-        let mut key = [0u8; 32];
+        let mut key = [0u8; KEY_LEN];
         argon2
             .hash_password_into(password.as_bytes(), salt, &mut key)
             .map_err(|_| MdbinError::DerivationFailed)?;
 
         Ok(key)
     }
+}
+
+/// La pista va en una sola línea del encabezado: se colapsan saltos de línea y espacios repetidos.
+fn sanitize_hint(hint: Option<&str>) -> Option<String> {
+    let clean = hint?.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!clean.is_empty()).then_some(clean)
 }

@@ -1,0 +1,2 @@
+# Las cápsulas .mdbin v2 son texto, pero su encabezado es el AAD del cifrado: no convertir saltos de línea
+*.mdbin binary

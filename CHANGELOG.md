@@ -7,6 +7,24 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [Sin publicar]
+
+### Añadido (Added)
+- **Archivos de texto plano**: además de Markdown se abre cualquier archivo de texto (`.txt`, `.log`, `.csv`, `.json`, `.yaml`, `.ini`, código fuente, archivos sin extensión…), tanto con `Ctrl + O` como arrastrándolo a la ventana. Los que no son Markdown se muestran tal cual, con resaltado según su tipo; los `.txt` y `.log` ajustan las líneas largas. Los archivos binarios se rechazan con un aviso.
+- **Codificación del documento**: la codificación se detecta al abrir (UTF-8, UTF-8 con BOM, UTF-16, Windows-1252…), así que los `.txt` antiguos de Windows con tildes y eñes ya no fallan. Desde la barra de estado se puede **reabrir** el archivo con otra codificación (si se ven caracteres raros como `Ã±`) o **guardarlo** convertido a otra. Al guardar se respeta la codificación original, y si un carácter no existe en la codificación elegida se avisa en vez de corromper el archivo.
+- **Editar cápsulas `.mdbin` abiertas**: una cápsula descifrada se puede editar, y al guardar (`Ctrl + S`) se vuelve a cifrar sobre el mismo archivo pidiendo la contraseña.
+- **Fuente para dislexia (OpenDyslexic)**: en *Ver → Fuente para Dislexia* o en la paleta de comandos. Aplica OpenDyslexic con más espaciado al área de lectura (el código conserva su fuente monoespaciada) y se recuerda entre sesiones. La fuente va incluida en la aplicación, así que funciona sin conexión.
+- **Nuevo diálogo de contraseña** para cifrar y descifrar `.mdbin`, que reemplaza las ventanas nativas `prompt()`: botón para mostrar u ocultar la contraseña, confirmación y medidor de fortaleza al cifrar, aviso de Bloq Mayús, advertencia de que la pista queda visible sin contraseña, indicador de progreso mientras se deriva la clave y textos en español e inglés.
+
+### Cambiado (Changed)
+- **Formato `.mdbin` 2.0 (RFC-001 rev. 2.0)**: las cápsulas nuevas son texto plano, así que las IAs pueden leerlas completas en vez de descartarlas como binarias. El encabezado indica que el documento está cifrado, con qué algoritmo (AES-256-GCM) y con qué parámetros de Argon2id, sal y nonce, y pide que se solicite la contraseña al usuario. Incluye una receta en Python para descifrarlo. Las cápsulas `.mdbin` del formato binario anterior ya no se pueden abrir.
+- El encabezado completo queda autenticado: si alguien altera la pista, la cápsula ya no descifra. Las cápsulas también resisten la conversión de saltos de línea que hacen Git o algunos editores.
+
+### Seguridad (Security)
+- La pista de una cápsula `.mdbin` se insertaba como HTML en el diálogo de contraseña; un archivo manipulado podía inyectar marcado en la aplicación. Ahora se muestra como texto.
+
+---
+
 ## [1.1.5] — 2026-10-26
 
 ### Añadido (Added)

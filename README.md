@@ -67,11 +67,12 @@ El mismo código se compila para **Windows, macOS y Linux** sin cambios: basta c
 
 ### Lectura y edición
 
+- **Cualquier archivo de texto**: además de Markdown abre `.txt`, `.log`, `.csv`, `.json`, `.yaml`, código fuente y más, con `Ctrl + O` o arrastrándolo. La codificación se detecta sola y se puede cambiar desde la barra de estado (reabrir o guardar con UTF-8, UTF-16, Windows-1252, etc.).
 - **Recarga automática**: si guardas el archivo desde otro editor (VS Code, Notepad…), MDCAT lo recarga sin perder la posición del scroll. `F5` fuerza la recarga.
 - **Guardado** con `Ctrl + S` sobre el archivo original, o diálogo nativo si el documento es nuevo.
 - **Índice lateral (TOC)** navegable, generado a partir de los encabezados.
 - **Paleta de comandos** (`Ctrl + K`) con búsqueda difusa.
-- **Ayudas de lectura**: modo enfoque (`F8`), máquina de escribir (`F9`) y lectura biónica (`F10`).
+- **Ayudas de lectura**: modo enfoque (`F8`), máquina de escribir (`F9`), lectura biónica (`F10`) y fuente para dislexia (OpenDyslexic, en el menú *Ver*).
 - **4 temas**: Blanco, Negro (OLED), Rosa y Verde-Oro.
 - **Interfaz bilingüe** ES / EN, cambiable en caliente.
 
@@ -86,6 +87,8 @@ El mismo código se compila para **Windows, macOS y Linux** sin cambios: basta c
 
 - Cifrado **AES-256-GCM** con clave derivada mediante **Argon2id**.
 - El contenido descifrado vive solo en memoria y se borra (`zeroize`) al cerrar.
+- El archivo es texto plano: un encabezado legible le indica a cualquier IA que está cifrado, con qué algoritmo y parámetros, y que debe pedir la contraseña al usuario para descifrarlo.
+- Una cápsula abierta se puede editar; al guardar se vuelve a cifrar pidiendo la contraseña.
 - Cualquier `.md` se puede exportar a `.mdbin` desde **Archivo → Exportar como cápsula cifrada .mdbin…** o desde la paleta de comandos (`Ctrl + K`).
 
 ## Atajos de teclado

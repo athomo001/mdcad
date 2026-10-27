@@ -8,6 +8,7 @@ pub mod callouts;
 pub mod mdbin;
 pub mod parser;
 pub mod security;
+pub mod text;
 pub mod toc;
 
 pub use mdbin::{MdbinContainer, MdbinEnvelope, MdbinError};

@@ -931,6 +931,25 @@ body.is-resizing-split * {
   margin: 1.4em 0;
 }
 
+/* Archivos de texto plano (.txt, .log...): se leen como prosa, así que las líneas largas se ajustan */
+.markdown-body pre.plain-text-file {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body pre.plain-text-file code {
+  white-space: inherit;
+}
+
+/* Fuente para dislexia: OpenDyslexic con más interletrado e interlineado en el área de lectura.
+   El código conserva su fuente monoespaciada (pre y code la declaran explícitamente). */
+body.dyslexia-font .markdown-body {
+  font-family: 'OpenDyslexic', var(--font-sans);
+  letter-spacing: 0.02em;
+  word-spacing: 0.12em;
+  line-height: 1.9;
+}
+
 .markdown-body code {
   font-family: var(--font-mono);
   font-size: 0.9em;
@@ -972,6 +991,91 @@ body.is-resizing-split * {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.status-encoding-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  padding: 1px 6px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.status-encoding-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-subtle);
+}
+
+.status-encoding-btn:disabled {
+  cursor: default;
+}
+
+.encoding-menu {
+  position: fixed;
+  width: 290px;
+  background: var(--bg-surface-elevated);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: var(--glass-shadow);
+  z-index: 300;
+  font-size: 13px;
+}
+
+.encoding-menu-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 2px;
+  background: var(--bg-surface);
+  border-radius: 6px;
+}
+
+.encoding-menu-tab {
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.encoding-menu-tab.active {
+  background: var(--accent-brand);
+  color: #FFF;
+}
+
+.encoding-menu-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.encoding-menu-help {
+  margin: 8px 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.encoding-menu-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.encoding-check {
+  color: var(--accent-brand);
+  font-weight: 700;
+}
+
+.dropdown-action:hover .encoding-check {
+  color: #FFF;
 }
 
 /* --------------------------------------------------------------------------
@@ -1328,7 +1432,132 @@ body.is-resizing-split * {
   padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.crypto-alert-error.shake {
   animation: shake 300ms ease;
+}
+
+/* `hidden` debe ganar a los `display` de los componentes del diálogo */
+.mdbin-dialog [hidden] {
+  display: none !important;
+}
+
+.security-input.has-action {
+  padding-right: 42px;
+}
+
+.security-input:disabled {
+  opacity: 0.6;
+}
+
+.input-action-btn {
+  position: absolute;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.input-action-btn:hover,
+.input-action-btn.active {
+  color: var(--accent-brand);
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.input-action-btn .icon-eye-off,
+.input-action-btn.active .icon-eye {
+  display: none;
+}
+
+.input-action-btn.active .icon-eye-off {
+  display: block;
+}
+
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.strength-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  flex: 1;
+}
+
+.strength-bars span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  transition: background 150ms ease;
+}
+
+.password-strength[data-score="0"] .strength-bars span:nth-child(-n+1),
+.password-strength[data-score="1"] .strength-bars span:nth-child(-n+1) { background: #EF4444; }
+.password-strength[data-score="2"] .strength-bars span:nth-child(-n+2) { background: #F59E0B; }
+.password-strength[data-score="3"] .strength-bars span:nth-child(-n+3) { background: #84CC16; }
+.password-strength[data-score="4"] .strength-bars span { background: #22C55E; }
+
+.strength-label {
+  min-width: 70px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.caps-warning {
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #F59E0B;
+}
+
+.field-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.btn-primary-glow:disabled,
+.btn-secondary:disabled {
+  cursor: progress;
+  opacity: 0.75;
+  transform: none;
+}
+
+.btn-spinner {
+  display: none;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #FFF;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.btn-primary-glow.busy .btn-spinner {
+  display: inline-block;
+}
+
+.btn-primary-glow.busy .btn-arrow {
+  display: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes shake {

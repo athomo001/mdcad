@@ -14,6 +14,11 @@ import { TtsManager } from './tts';
 import { I18nManager } from './i18n';
 import { AnnotationManager } from './annotations';
 import { TabStrip, TabMenuItem } from './tabs';
+import { PasswordDialog } from './password-dialog';
+import { EncodingMenu, encodingShortLabel } from './encoding-menu';
+import '@fontsource/opendyslexic/400.css';
+import '@fontsource/opendyslexic/700.css';
+import '@fontsource/opendyslexic/400-italic.css';
 
 // Tipos de dominio del sistema
 export type VisualTheme = 'blanco' | 'negro' | 'rosa' | 'verde-dorado';
@@ -48,8 +53,13 @@ export interface TabSnapshot {
   raw: string;
   dirty: boolean;
   scrollTop: number;
-  /** Cápsula .mdbin descifrada en memoria: nunca se guarda ni se recarga sobre su ruta. */
+  /** Cápsula .mdbin descifrada en memoria: al guardar se vuelve a cifrar sobre su ruta pidiendo la
+   *  contraseña; nunca se guarda en claro ni se recarga desde el disco. */
   encrypted: boolean;
+  /** Codificación del archivo en disco (identificador del núcleo de Rust, p. ej. "UTF-8" o "windows-1252"). */
+  encoding: string;
+  /** Pista del encabezado de la cápsula .mdbin, para proponerla al volver a cifrar. */
+  mdbinHint?: string;
   doc: ProcessedDocument | null;
 }
 
@@ -63,6 +73,16 @@ interface DocTab extends TabSnapshot {
 export interface WindowSummary {
   label: string;
   title: string;
+}
+
+export interface TextFile {
+  text: string;
+  encoding: string;
+}
+
+export interface DecryptedDocument {
+  markdown: string;
+  doc: ProcessedDocument;
 }
 
 export interface MdbinEnvelope {
@@ -128,18 +148,11 @@ export class TauriBridge {
     return this.desktopFallbackParse(content);
   }
 
-  static async readFile(path: string): Promise<ProcessedDocument> {
+  /** Lee un archivo de texto plano. Sin `encoding` Rust detecta la codificación; con ella la fuerza. */
+  static async readTextFile(path: string, encoding?: string): Promise<TextFile> {
     if (this.isTauriAvailable()) {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<ProcessedDocument>('read_and_parse_file', { path });
-    }
-    throw new Error('Lectura de archivos de disco solo disponible en modo desktop.');
-  }
-
-  static async readFileContent(path: string): Promise<string> {
-    if (this.isTauriAvailable()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string>('read_file_content', { path });
+      return await invoke<TextFile>('read_text_file', { path, encoding: encoding ?? null });
     }
     throw new Error('Lectura de archivos de disco solo disponible en modo desktop.');
   }
@@ -150,7 +163,7 @@ export class TauriBridge {
       return await invoke<MdbinEnvelope>('inspect_mdbin_envelope', { path });
     }
     return {
-      format: 'MDBIN/1.0',
+      format: 'MDBIN/2.0',
       type: 'Encrypted-Markdown-Container',
       ai_instructions: 'Inspección de cápsula MDBIN',
       document_hint: 'Cápsula de seguridad',
@@ -166,10 +179,10 @@ export class TauriBridge {
     }
   }
 
-  static async readAndDecryptMdbin(path: string, password: string): Promise<ProcessedDocument> {
+  static async readAndDecryptMdbin(path: string, password: string): Promise<DecryptedDocument> {
     if (this.isTauriAvailable()) {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<ProcessedDocument>('read_and_decrypt_mdbin', { path, password });
+      return await invoke<DecryptedDocument>('read_and_decrypt_mdbin', { path, password });
     }
     throw new Error('Descifrado criptográfico MDBIN solo disponible en modo desktop nativo con Rust.');
   }
@@ -197,20 +210,15 @@ export class TauriBridge {
   }
 
   /**
-   * Guarda texto Markdown en un archivo del disco vía Rust.
+   * Guarda texto en un archivo del disco con la codificación indicada. Lanza el motivo si falla
+   * (por ejemplo, un carácter que no existe en la codificación elegida).
    */
-  static async saveMarkdownFile(path: string, content: string): Promise<boolean> {
-    if (this.isTauriAvailable()) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('save_markdown_file', { path, content });
-        return true;
-      } catch (err) {
-        console.error('Error al guardar archivo Markdown:', err);
-        return false;
-      }
+  static async saveTextFile(path: string, content: string, encoding: string): Promise<void> {
+    if (!this.isTauriAvailable()) {
+      throw new Error('Guardar archivos solo está disponible en modo desktop.');
     }
-    return false;
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('save_text_file', { path, content, encoding });
   }
 
   /**
@@ -381,7 +389,7 @@ Lector y visor de Markdown ultraliviano de nueva generación para Windows.
 > Parseo nativo zero-copy en Rust a más de 100.000 líneas en milisegundos, 4 temas de color de alto contraste, lectura con síntesis de voz neuronal y vigilancia automática de archivos en tiempo real.
 
 ## Primeros Pasos
-- Abre cualquier archivo Markdown presionando **Ctrl + O** o arrástralo directamente a esta ventana. Cada archivo se abre en su propia pestaña.
+- Abre cualquier archivo Markdown o de texto plano (.txt, .log, .json...) presionando **Ctrl + O** o arrástralo directamente a esta ventana. Cada archivo se abre en su propia pestaña.
 - Arrastra una pestaña fuera de la ventana para separarla, o suéltala sobre otra ventana de MDCAT para unirlas.
 - Si editas tu archivo en cualquier editor externo (como Notepad o VS Code) y lo guardas, **MDCAT se actualiza automáticamente al instante**.
 - Presiona **F5** en cualquier momento para recargar el archivo abierto desde el disco sin perder tu posición de lectura.
@@ -408,6 +416,37 @@ function fileNameOf(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
+const MARKDOWN_FILE = /\.(md|markdown|mdown|mkd|mkdn|mdwn|mdtxt|mdtext|mdbin)$/i;
+
+/** Lenguaje de resaltado para los archivos de texto que no son Markdown. */
+const LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  json: 'json', jsonc: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml', ini: 'ini', cfg: 'ini', conf: 'ini',
+  xml: 'xml', html: 'html', htm: 'html', css: 'css', js: 'javascript', ts: 'typescript', py: 'python',
+  rs: 'rust', go: 'go', java: 'java', c: 'c', h: 'c', cpp: 'cpp', cs: 'csharp', sh: 'bash', ps1: 'powershell',
+  bat: 'bat', sql: 'sql', csv: 'csv', tsv: 'csv',
+};
+
+/** `null` si la ruta es Markdown; si no, el lenguaje con el que se muestra (`text` para prosa o desconocidos). */
+function plainTextLanguage(path: string | null): string | null {
+  if (!path || MARKDOWN_FILE.test(path)) return null;
+  const ext = /\.([^.\\/]+)$/.exec(path)?.[1]?.toLowerCase() ?? '';
+  return LANGUAGE_BY_EXTENSION[ext] ?? 'text';
+}
+
+/**
+ * Markdown que se renderiza para un documento. Los archivos de texto que no son Markdown se muestran
+ * tal cual dentro de un bloque de código, con una cerca más larga que cualquier racha de comillas
+ * invertidas del contenido para que no pueda cerrarse antes de tiempo.
+ */
+function viewSource(raw: string, path: string | null): string {
+  const language = plainTextLanguage(path);
+  if (language === null) return raw;
+  // reduce y no Math.max(...): un log enorme puede tener más rachas que argumentos admite una llamada
+  const longestRun = (raw.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0);
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${raw}\n${fence}\n`;
+}
+
 // -----------------------------------------------------------------------------
 // 3. Aplicación Principal de Escritorio
 // -----------------------------------------------------------------------------
@@ -417,12 +456,14 @@ class App {
   private ttsManager = new TtsManager();
   private i18nManager = new I18nManager();
   private annotationManager = new AnnotationManager();
+  private passwordDialog = new PasswordDialog(this.i18nManager);
+  private encodingMenu = new EncodingMenu(this.i18nManager);
   private focusModeActive = false;
+  private dyslexiaFontActive = false;
   private typewriterModeActive = false;
   private currentRawMarkdown = '';
   private currentDoc: ProcessedDocument | null = null;
   private scrollObserver: IntersectionObserver | null = null;
-  private pendingMdbinPath: string | null = null;
 
   // Estado de Modos de Vista (Lindo, Crudo, Dividido) y Editor en vivo
   private currentViewMode: 'lindo' | 'crudo' | 'dividido' = 'lindo';
@@ -441,6 +482,8 @@ class App {
 
   // Estado del archivo actual y vigilante en vivo (Live Reload)
   private currentFilePath: string | null = null;
+  /** Ruta del documento que se muestra (también la de una cápsula .mdbin); decide cómo se renderiza. */
+  private currentViewPath: string | null = null;
   private lastFileMtime: number | null = null;
   private fileWatchTimer: number | null = null;
 
@@ -457,6 +500,7 @@ class App {
     this.ttsManager.init();
     this.ttsManager.setI18nManager(this.i18nManager);
     this.annotationManager.init();
+    this.setDyslexiaFont(localStorage.getItem('mdcat_dyslexia_font') === '1', false);
 
     this.appContainer = document.getElementById('app-container');
     this.rawEditorTextarea = document.getElementById('raw-markdown-editor') as HTMLTextAreaElement | null;
@@ -474,6 +518,7 @@ class App {
       if (this.currentDoc) {
         this.updateStatusBar(this.currentDoc.metrics);
       }
+      this.updateEncodingStatus(this.getActiveTab());
       this.updatePaletteCommands();
     });
 
@@ -527,7 +572,7 @@ class App {
   private openWelcomeTab(): void {
     const isEn = this.i18nManager.getLocale() === 'en';
     this.addTab(
-      { path: null, title: isEn ? 'Welcome' : 'Bienvenida', raw: WELCOME_MARKDOWN, dirty: false, scrollTop: 0, encrypted: false, doc: null },
+      { path: null, title: isEn ? 'Welcome' : 'Bienvenida', raw: WELCOME_MARKDOWN, dirty: false, scrollTop: 0, encrypted: false, encoding: 'UTF-8', doc: null },
       { welcome: true }
     );
   }
@@ -566,10 +611,7 @@ class App {
       tabs.forEach((tab) => this.addTab(tab));
     });
     await TauriBridge.onWindowEvent<string>('mdcat://gather', (target) => void this.sendAllTabsTo(target));
-    await TauriBridge.onFileDrop((paths) => {
-      const docs = paths.filter((p) => /\.(md|markdown|mdbin)$/i.test(p));
-      void this.openPaths(docs);
-    });
+    await TauriBridge.onFileDrop((paths) => void this.openPaths(paths));
   }
 
   private getActiveTab(): DocTab | null {
@@ -624,11 +666,13 @@ class App {
 
     // Las cápsulas .mdbin no tienen ruta editable: guardar pide "Guardar como" para no pisar el cifrado
     this.currentFilePath = tab.encrypted ? null : tab.path;
+    this.currentViewPath = tab.path;
     this.currentRawMarkdown = tab.raw;
     this.lastFileMtime = tab.mtime;
+    this.updateEncodingStatus(tab);
 
     if (!tab.doc) {
-      tab.doc = await TauriBridge.parseMarkdown(tab.raw);
+      tab.doc = await this.parseForView(tab.raw, tab.path);
       if (tab.id !== this.activeTabId) return;
     }
     this.applyProcessedDocument(tab.doc);
@@ -723,8 +767,8 @@ class App {
     if (id === this.activeTabId) this.captureActiveTab();
     const tab = this.tabs.find((t) => t.id === id);
     if (!tab) return null;
-    const { path, title, raw, dirty, scrollTop, encrypted, doc } = tab;
-    return { path, title, raw, dirty, scrollTop, encrypted, doc };
+    const { path, title, raw, dirty, scrollTop, encrypted, encoding, mdbinHint, doc } = tab;
+    return { path, title, raw, dirty, scrollTop, encrypted, encoding, mdbinHint, doc };
   }
 
   /** La pestaña ya vive en otra ventana: se quita de aquí y, si no queda ninguna, se cierra la ventana. */
@@ -814,7 +858,7 @@ class App {
       } catch (err) {
         if (!silent) {
           const isEn = this.i18nManager.getLocale() === 'en';
-          this.showToast(`${isEn ? '❌ Could not open' : '❌ No se pudo abrir'}: ${fileNameOf(path)}`);
+          this.showToast(`${isEn ? '❌ Could not open' : '❌ No se pudo abrir'}: ${fileNameOf(path)} — ${err}`);
         }
       }
     }
@@ -848,32 +892,37 @@ class App {
       return;
     }
 
-    if (path.endsWith('.mdbin')) {
-      try {
-        const env = await TauriBridge.inspectMdbin(path);
-        this.openMdbinModal(path, env.document_hint);
-      } catch {
-        this.openMdbinModal(path);
-      }
+    if (/\.mdbin$/i.test(path)) {
+      await this.openEncryptedByPath(path);
       return;
     }
 
-    try {
-      const doc = await TauriBridge.readFile(path);
+    // Rust detecta la codificación y rechaza los archivos que no son texto plano
+    const file = await TauriBridge.readTextFile(path);
+    const mtime = await TauriBridge.getFileMtime(path);
+    this.addTab(
+      { path, title: fileNameOf(path), raw: file.text, dirty: false, scrollTop: 0, encrypted: false, encoding: file.encoding, doc: null },
+      { mtime }
+    );
+  }
 
-      let raw = '';
-      try {
-        raw = await TauriBridge.readFileContent(path);
-      } catch (e) {
-        console.warn('No se pudo leer texto plano directo:', e);
-      }
-
-      const mtime = await TauriBridge.getFileMtime(path);
-      this.addTab({ path, title: fileNameOf(path), raw, dirty: false, scrollTop: 0, encrypted: false, doc }, { mtime });
-    } catch (err) {
-      console.error('Error al abrir archivo por ruta:', err);
-      throw err;
-    }
+  /** Pide la contraseña de una cápsula .mdbin y la abre descifrada (y editable) en una pestaña. */
+  private async openEncryptedByPath(path: string): Promise<void> {
+    // Un sobre ilegible significa que no es una cápsula válida: se avisa sin pedir contraseña
+    const envelope = await TauriBridge.inspectMdbin(path);
+    const hint = envelope.document_hint;
+    await this.passwordDialog.open({
+      mode: 'decrypt',
+      fileName: fileNameOf(path),
+      hint,
+      onSubmit: async (password) => {
+        const { markdown, doc } = await TauriBridge.readAndDecryptMdbin(path, password);
+        this.addTab({
+          path, title: fileNameOf(path), raw: markdown, dirty: false, scrollTop: 0,
+          encrypted: true, encoding: 'UTF-8', mdbinHint: hint, doc,
+        });
+      },
+    });
   }
 
   /**
@@ -882,19 +931,18 @@ class App {
   async reloadCurrentDocument(silent = false): Promise<void> {
     if (this.currentFilePath) {
       try {
+        const path = this.currentFilePath;
         const scrollPos = this.readerViewport?.scrollTop ?? 0;
-        const doc = await TauriBridge.readFile(this.currentFilePath);
-        this.applyProcessedDocument(doc);
+        // Se relee con la codificación de la pestaña para no cambiarla en cada recarga automática
+        const file = await TauriBridge.readTextFile(path, this.getActiveTab()?.encoding);
+        this.applyProcessedDocument(await this.parseForView(file.text, path));
 
         if (!this.isDirty) {
-          try {
-            const raw = await TauriBridge.readFileContent(this.currentFilePath);
-            this.currentRawMarkdown = raw;
-            if (this.rawEditorTextarea) {
-              this.rawEditorTextarea.value = raw;
-              this.updateEditorCounter();
-            }
-          } catch {}
+          this.currentRawMarkdown = file.text;
+          if (this.rawEditorTextarea) {
+            this.rawEditorTextarea.value = file.text;
+            this.updateEditorCounter();
+          }
         }
 
         if (this.readerViewport) this.readerViewport.scrollTop = scrollPos;
@@ -1159,42 +1207,139 @@ class App {
     }
   }
 
-  async saveCurrentDocument(): Promise<void> {
+  /** Guarda la pestaña activa. Devuelve `true` si el documento quedó guardado. */
+  async saveCurrentDocument(): Promise<boolean> {
     const contentToSave = this.rawEditorTextarea ? this.rawEditorTextarea.value : this.currentRawMarkdown;
     const isEn = this.i18nManager.getLocale() === 'en';
+    const tab = this.getActiveTab();
+
+    // Cápsula cifrada: se vuelve a cifrar sobre su propio archivo, pidiendo la contraseña
+    if (tab?.encrypted && tab.path) {
+      const path = tab.path;
+      const saved = await this.passwordDialog.open({
+        mode: 'encrypt',
+        fileName: tab.title,
+        hint: tab.mdbinHint,
+        onSubmit: async (password, hint) => {
+          await TauriBridge.exportToMdbin(path, contentToSave, password, hint);
+          tab.mdbinHint = hint || undefined;
+        },
+      });
+      if (saved) {
+        this.setDirty(false);
+        this.showToast(this.i18nManager.t().mdbin.savedToast);
+      }
+      return saved;
+    }
+
+    const encoding = tab?.encoding ?? 'UTF-8';
+    const errorToast = (err: unknown) => this.showToast(`${isEn ? '❌ Error saving file' : '❌ Error al guardar el archivo'}: ${err}`);
 
     if (this.currentFilePath) {
-      const ok = await TauriBridge.saveMarkdownFile(this.currentFilePath, contentToSave);
-      if (ok) {
-        this.setDirty(false);
-        this.lastFileMtime = Date.now();
-        this.showToast(isEn ? '✅ Document saved successfully' : '✅ Documento guardado exitosamente');
-      } else {
-        this.showToast(isEn ? '❌ Error saving file' : '❌ Error al guardar el archivo');
+      try {
+        await TauriBridge.saveTextFile(this.currentFilePath, contentToSave, encoding);
+      } catch (err) {
+        errorToast(err);
+        return false;
       }
-    } else {
-      const targetPath = await TauriBridge.saveMarkdownDialog('documento.md');
-      if (targetPath) {
-        this.currentFilePath = targetPath;
-        const ok = await TauriBridge.saveMarkdownFile(targetPath, contentToSave);
-        if (ok) {
-          this.setDirty(false);
-          this.lastFileMtime = Date.now();
-          const baseName = fileNameOf(targetPath);
-
-          // La pestaña pasa a representar el archivo recién guardado
-          const tab = this.getActiveTab();
-          if (tab) {
-            Object.assign(tab, { path: targetPath, title: baseName, encrypted: false, welcome: false });
-            this.renderTabs();
-            this.persistSession();
-            void TauriBridge.setWindowTitle(`${baseName} — MDCAT Extended`);
-          }
-          this.startFileWatcher(targetPath);
-          this.showToast(isEn ? `✅ Document saved as: ${baseName}` : `✅ Documento guardado como: ${baseName}`);
-        }
-      }
+      this.setDirty(false);
+      this.lastFileMtime = Date.now();
+      this.showToast(isEn ? '✅ Document saved successfully' : '✅ Documento guardado exitosamente');
+      return true;
     }
+
+    const targetPath = await TauriBridge.saveMarkdownDialog('documento.md');
+    if (!targetPath) return false;
+    try {
+      await TauriBridge.saveTextFile(targetPath, contentToSave, encoding);
+    } catch (err) {
+      errorToast(err);
+      return false;
+    }
+    this.currentFilePath = targetPath;
+    this.setDirty(false);
+    this.lastFileMtime = Date.now();
+    const baseName = fileNameOf(targetPath);
+
+    // La pestaña pasa a representar el archivo recién guardado
+    if (tab) {
+      Object.assign(tab, { path: targetPath, title: baseName, encrypted: false, welcome: false });
+      this.currentViewPath = targetPath;
+      this.renderTabs();
+      this.persistSession();
+      void TauriBridge.setWindowTitle(`${baseName} — MDCAT Extended`);
+    }
+    this.startFileWatcher(targetPath);
+    this.showToast(isEn ? `✅ Document saved as: ${baseName}` : `✅ Documento guardado como: ${baseName}`);
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Codificación del documento (barra de estado)
+  // ---------------------------------------------------------------------------
+
+  private updateEncodingStatus(tab: DocTab | null): void {
+    const btn = document.getElementById('status-encoding-btn') as HTMLButtonElement | null;
+    if (!btn || !tab) return;
+    const t = this.i18nManager.t().encoding;
+    btn.textContent = encodingShortLabel(tab.encoding);
+    btn.disabled = tab.encrypted;
+    btn.title = tab.encrypted ? t.lockedEncrypted : t.buttonTitle;
+  }
+
+  private toggleEncodingMenu(anchor: HTMLElement): void {
+    if (this.encodingMenu.isOpen()) {
+      this.encodingMenu.close();
+      return;
+    }
+    const tab = this.getActiveTab();
+    if (!tab || tab.encrypted) return;
+    this.encodingMenu.open(anchor, {
+      current: tab.encoding,
+      canReopen: tab.path !== null,
+      onReopen: (encoding) => void this.reopenWithEncoding(encoding),
+      onSave: (encoding) => void this.saveWithEncoding(encoding),
+    });
+  }
+
+  /** Vuelve a leer el archivo del disco con otra codificación (cuando la detectada era incorrecta). */
+  private async reopenWithEncoding(encoding: string): Promise<void> {
+    const tab = this.getActiveTab();
+    if (!tab?.path || tab.encrypted) return;
+    const t = this.i18nManager.t().encoding;
+    if (this.isDirty && !confirm(t.discardConfirm)) return;
+
+    try {
+      const file = await TauriBridge.readTextFile(tab.path, encoding);
+      tab.encoding = file.encoding;
+      this.updateEncodingStatus(tab);
+      await this.renderContent(file.text);
+      this.showToast(t.reopenedToast.replace('{encoding}', encodingShortLabel(file.encoding)));
+    } catch (err) {
+      const isEn = this.i18nManager.getLocale() === 'en';
+      this.showToast(`${isEn ? '❌ Could not reopen' : '❌ No se pudo reabrir'}: ${err}`);
+    }
+  }
+
+  /** Guarda el documento convirtiéndolo a otra codificación; si no se guarda, conserva la anterior. */
+  private async saveWithEncoding(encoding: string): Promise<void> {
+    const tab = this.getActiveTab();
+    if (!tab || tab.encrypted) return;
+    const previous = tab.encoding;
+    tab.encoding = encoding;
+    this.updateEncodingStatus(tab);
+
+    if (await this.saveCurrentDocument()) {
+      this.showToast(this.i18nManager.t().encoding.savedToast.replace('{encoding}', encodingShortLabel(encoding)));
+    } else {
+      tab.encoding = previous;
+      this.updateEncodingStatus(tab);
+    }
+  }
+
+  /** Parsea lo que se muestra de un documento: Markdown tal cual, otros textos dentro de un bloque de código. */
+  private parseForView(raw: string, path: string | null): Promise<ProcessedDocument> {
+    return TauriBridge.parseMarkdown(viewSource(raw, path));
   }
 
   private async renderContent(markdownText: string, fromEditor: boolean = false): Promise<void> {
@@ -1204,7 +1349,7 @@ class App {
       this.setDirty(false);
       this.updateEditorCounter();
     }
-    const doc = await TauriBridge.parseMarkdown(markdownText);
+    const doc = await this.parseForView(markdownText, this.currentViewPath);
     this.applyProcessedDocument(doc);
   }
 
@@ -1215,6 +1360,9 @@ class App {
     const container = document.getElementById('markdown-content');
     if (container) {
       container.innerHTML = doc.ast_html;
+      if (plainTextLanguage(this.currentViewPath) === 'text') {
+        container.querySelector('pre')?.classList.add('plain-text-file');
+      }
 
       // Vincular IDs a los encabezados para anclaje de navegación exacto
       container.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6').forEach((heading) => {
@@ -1540,6 +1688,13 @@ class App {
         action: () => this.toggleBionicReading(),
       },
       {
+        id: 'toggle-dyslexia',
+        title: 'Alternar Fuente para Dislexia (OpenDyslexic)',
+        subtitle: 'Tipografía con letras de base pesada y más espaciado para facilitar la lectura',
+        icon: '🔤',
+        action: () => this.setDyslexiaFont(!this.dyslexiaFontActive),
+      },
+      {
         id: 'toggle-sidebar',
         title: 'Mostrar / Ocultar Barra Lateral',
         subtitle: 'Contrae o despliega el índice de contenidos',
@@ -1605,6 +1760,19 @@ class App {
     BionicReader.toggle(container);
   }
 
+  /** Activa la fuente OpenDyslexic en el área de lectura y recuerda la preferencia. */
+  private setDyslexiaFont(active: boolean, announce = true): void {
+    this.dyslexiaFontActive = active;
+    document.body.classList.toggle('dyslexia-font', active);
+    try {
+      localStorage.setItem('mdcat_dyslexia_font', active ? '1' : '0');
+    } catch {}
+    if (announce) {
+      const t = this.i18nManager.t().readingAids;
+      this.showToast(active ? t.dyslexiaOn : t.dyslexiaOff);
+    }
+  }
+
   private toggleFocusMode(): void {
     this.focusModeActive = !this.focusModeActive;
     document.body.classList.toggle('focus-mode', this.focusModeActive);
@@ -1625,76 +1793,26 @@ class App {
   }
 
   private async exportCurrentDocumentToMdbin(): Promise<void> {
-    // Las cápsulas abiertas solo traen el HTML renderizado, no el Markdown: no hay nada que volver a cifrar
-    if (!this.currentRawMarkdown.trim()) {
+    const markdown = this.currentRawMarkdown;
+    if (!markdown.trim()) {
       const isEn = this.i18nManager.getLocale() === 'en';
-      this.showToast(isEn ? 'This tab has no Markdown text to encrypt' : 'Esta pestaña no tiene texto Markdown para cifrar');
+      this.showToast(isEn ? 'This tab has no text to encrypt' : 'Esta pestaña no tiene texto para cifrar');
       return;
     }
 
-    const savePath = await TauriBridge.saveFileDialog('documento_seguro.mdbin');
+    const tab = this.getActiveTab();
+    const baseName = tab?.path ? fileNameOf(tab.path).replace(/\.[^.]+$/, '') : 'documento_seguro';
+    const savePath = await TauriBridge.saveFileDialog(`${baseName}.mdbin`);
     if (!savePath) return;
 
-    const password = prompt('Ingresa la contraseña para cifrar la cápsula .mdbin:');
-    if (!password) return;
-    const hint = prompt('Pista para el sobre de IA (opcional):') || 'Documento Confidencial';
-
-    try {
-      await TauriBridge.exportToMdbin(savePath, this.currentRawMarkdown, password, hint);
-      alert(`¡Cápsula MDBIN guardada exitosamente en:\n${savePath}`);
-    } catch (err: any) {
-      alert(`Error al cifrar y guardar: ${err?.toString()}`);
-    }
-  }
-
-  private openMdbinModal(path: string, hint?: string): void {
-    this.pendingMdbinPath = path;
-    const modal = document.getElementById('mdbin-modal-overlay');
-    const desc = document.getElementById('mdbin-modal-desc');
-    const input = document.getElementById('mdbin-password-input') as HTMLInputElement;
-    const errMsg = document.getElementById('mdbin-error-msg');
-
-    if (desc && hint) {
-      desc.innerHTML = `Documento protegido: <strong>${hint}</strong>. Ingresa la contraseña de descifrado AES-256-GCM.`;
-    }
-    if (errMsg) errMsg.style.display = 'none';
-    if (input) input.value = '';
-
-    modal?.classList.add('open');
-    setTimeout(() => input?.focus(), 50);
-  }
-
-  private closeMdbinModal(): void {
-    const modal = document.getElementById('mdbin-modal-overlay');
-    modal?.classList.remove('open');
-    this.pendingMdbinPath = null;
-  }
-
-  private async submitMdbinPassword(): Promise<void> {
-    if (!this.pendingMdbinPath) return;
-
-    const input = document.getElementById('mdbin-password-input') as HTMLInputElement;
-    const errMsg = document.getElementById('mdbin-error-msg');
-    const password = input.value;
-
-    if (!password) {
-      if (errMsg) {
-        errMsg.textContent = 'Por favor ingresa la contraseña.';
-        errMsg.style.display = 'block';
-      }
-      return;
-    }
-
-    try {
-      const path = this.pendingMdbinPath;
-      const doc = await TauriBridge.readAndDecryptMdbin(path, password);
-      this.closeMdbinModal();
-      this.addTab({ path, title: fileNameOf(path), raw: '', dirty: false, scrollTop: 0, encrypted: true, doc });
-    } catch (err: any) {
-      if (errMsg) {
-        errMsg.textContent = err?.toString() || 'Contraseña incorrecta o fallo de integridad.';
-        errMsg.style.display = 'block';
-      }
+    const saved = await this.passwordDialog.open({
+      mode: 'encrypt',
+      fileName: fileNameOf(savePath),
+      hint: tab?.mdbinHint,
+      onSubmit: (password, hint) => TauriBridge.exportToMdbin(savePath, markdown, password, hint),
+    });
+    if (saved) {
+      this.showToast(this.i18nManager.t().mdbin.exportedToast.replace('{file}', fileNameOf(savePath)));
     }
   }
 
@@ -1723,15 +1841,11 @@ class App {
       if (e.target === aboutModal) closeAbout();
     });
 
-    // Modal MDBIN
-    document.getElementById('close-mdbin-btn')?.addEventListener('click', () => this.closeMdbinModal());
-    document.getElementById('cancel-mdbin-btn')?.addEventListener('click', () => this.closeMdbinModal());
-    document.getElementById('submit-mdbin-btn')?.addEventListener('click', () => this.submitMdbinPassword());
-    document.getElementById('mdbin-password-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.submitMdbinPassword();
-      }
+    // Codificación del documento en la barra de estado
+    const encodingBtn = document.getElementById('status-encoding-btn');
+    encodingBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleEncodingMenu(encodingBtn);
     });
 
     // 3. Menús superiores desplegables
@@ -1749,6 +1863,8 @@ class App {
 
     // 4. Atajos de Teclado Globales de Escritorio
     document.addEventListener('keydown', (e) => {
+      // Con el diálogo de contraseña abierto, los atajos globales no deben disparar otras acciones
+      if (this.passwordDialog.isOpen() && e.key !== 'Escape') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (this.activeTabId) this.closeTab(this.activeTabId);
@@ -1766,7 +1882,7 @@ class App {
         this.reloadCurrentDocument();
       } else if (e.key === 'Escape') {
         closeAbout();
-        this.closeMdbinModal();
+        this.passwordDialog.cancel();
         this.closeMenus();
       } else if (e.key === 'F7') {
         e.preventDefault();
@@ -1804,10 +1920,9 @@ class App {
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
       for (const file of Array.from(e.dataTransfer?.files ?? [])) {
-        if (/\.(md|markdown)$/i.test(file.name)) {
-          const raw = await file.text();
-          this.addTab({ path: null, title: file.name, raw, dirty: false, scrollTop: 0, encrypted: false, doc: null });
-        }
+        const raw = await file.text();
+        if (raw.includes('\0')) continue; // binario: no es texto plano
+        this.addTab({ path: null, title: file.name, raw, dirty: false, scrollTop: 0, encrypted: false, encoding: 'UTF-8', doc: null });
       }
     });
 
@@ -1875,6 +1990,11 @@ class App {
     document.getElementById('action-toggle-bionic')?.addEventListener('click', () => {
       this.closeMenus();
       this.toggleBionicReading();
+    });
+
+    document.getElementById('action-toggle-dyslexia')?.addEventListener('click', () => {
+      this.closeMenus();
+      this.setDyslexiaFont(!this.dyslexiaFontActive);
     });
 
     // Acciones de menú Ayuda

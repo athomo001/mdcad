@@ -64,6 +64,7 @@
         <button class="dropdown-action" id="action-focus-mode"><span data-i18n="menu.focusMode">Modo Enfoque</span> <span class="shortcut-badge">F8</span></button>
         <button class="dropdown-action" id="action-typewriter-mode"><span data-i18n="menu.typewriterMode">Modo Máquina de Escribir</span> <span class="shortcut-badge">F9</span></button>
         <button class="dropdown-action" id="action-toggle-bionic"><span data-i18n="menu.bionicMode">Alternar Lectura Biónica</span> <span class="shortcut-badge">F10</span></button>
+        <button class="dropdown-action" id="action-toggle-dyslexia"><span data-i18n="menu.dyslexiaFont">Fuente para Dislexia (OpenDyslexic)</span></button>
       </div>
     </div>
 
@@ -192,7 +193,7 @@
     <div class="status-right">
       <span id="status-time">~0 min de lectura</span>
       <span>•</span>
-      <span>UTF-8</span>
+      <button class="status-encoding-btn" id="status-encoding-btn" data-i18n-title="encoding.buttonTitle">UTF-8</button>
       <span>•</span>
       <span>MDCAT Core (Rust)</span>
     </div>
@@ -213,7 +214,7 @@
 
         <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;" data-i18n="about.title">MDCAT Extended</h2>
         <div style="display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-brand); background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); padding: 2px 8px; border-radius: 12px; margin-bottom: 8px;">
-          v1.1.5 • Alpha Release
+          v1.1.6 • Alpha Release
         </div>
         <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; padding: 0 10px;" data-i18n="about.tagline">
           Lector y analizador de Markdown de nueva generación, ultra liviano, seguro y optimizado para documentos masivos.
@@ -258,9 +259,9 @@
     </div>
   </div>
 
-  <!-- Modal Premium para Descifrado de Contenedor MDBIN (RFC-001) -->
+  <!-- Diálogo de contraseña de cápsulas MDBIN (RFC-001): descifrar y cifrar -->
   <div class="about-modal-overlay" id="mdbin-modal-overlay">
-    <div class="about-modal mdbin-dialog">
+    <div class="about-modal mdbin-dialog" role="dialog" aria-modal="true" aria-labelledby="mdbin-modal-title">
       <div class="about-modal-header">
         <div class="modal-title-group">
           <div class="security-badge-icon">
@@ -270,45 +271,69 @@
             </svg>
           </div>
           <div>
-            <h3>Cápsula Cifrada MDBIN</h3>
-            <span class="crypto-subbadge">AES-256-GCM • Argon2id</span>
+            <h3 id="mdbin-modal-title" data-i18n="mdbin.title">Cápsula Cifrada MDBIN</h3>
+            <span class="crypto-subbadge" data-i18n="mdbin.subtitle">AES-256-GCM • Argon2id</span>
           </div>
         </div>
-        <button class="about-close-btn" id="close-mdbin-btn" title="Cerrar modal (Esc)">✕</button>
+        <button class="about-close-btn" id="close-mdbin-btn" title="Cerrar (Esc)">✕</button>
       </div>
 
       <div class="about-modal-body">
         <div class="crypto-shield-banner">
-          <p id="mdbin-modal-desc">
-            Este documento está protegido con cifrado de grado militar. Ingresa la frase de paso para descifrarlo de forma segura directamente en memoria RAM.
-          </p>
+          <p id="mdbin-modal-desc"></p>
         </div>
 
         <div class="form-group">
-          <label for="mdbin-password-input">Contraseña de Acceso:</label>
+          <label for="mdbin-password-input" data-i18n="mdbin.passwordLabel">Contraseña de Acceso:</label>
           <div class="input-password-wrapper">
             <span class="input-icon">🔑</span>
-            <input type="password" id="mdbin-password-input" class="security-input" placeholder="Escribe la contraseña de desbloqueo..." autocomplete="off">
+            <input type="password" id="mdbin-password-input" class="security-input has-action" autocomplete="off" spellcheck="false">
+            <button type="button" class="input-action-btn" id="mdbin-toggle-visibility" aria-pressed="false">
+              <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <svg class="icon-eye-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            </button>
+          </div>
+          <div class="password-strength" id="mdbin-strength" hidden>
+            <div class="strength-bars"><span></span><span></span><span></span><span></span></div>
+            <span class="strength-label" id="mdbin-strength-label"></span>
+          </div>
+          <div class="caps-warning" id="mdbin-caps-warning" hidden>⇪ <span data-i18n="mdbin.capsLock">Bloq Mayús está activado</span></div>
+        </div>
+
+        <div id="mdbin-encrypt-fields" hidden>
+          <div class="form-group">
+            <label for="mdbin-confirm-input" data-i18n="mdbin.confirmLabel">Confirmar contraseña:</label>
+            <div class="input-password-wrapper">
+              <span class="input-icon">🔁</span>
+              <input type="password" id="mdbin-confirm-input" class="security-input" autocomplete="new-password" spellcheck="false" data-i18n-placeholder="mdbin.confirmPlaceholder">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="mdbin-hint-input" data-i18n="mdbin.hintLabel">Pista (opcional):</label>
+            <div class="input-password-wrapper">
+              <span class="input-icon">💡</span>
+              <input type="text" id="mdbin-hint-input" class="security-input" maxlength="120" autocomplete="off" data-i18n-placeholder="mdbin.hintPlaceholder">
+            </div>
+            <p class="field-note" data-i18n="mdbin.hintWarning">La pista queda visible sin contraseña: no escribas en ella nada confidencial.</p>
           </div>
         </div>
 
-        <div id="mdbin-error-msg" class="crypto-alert-error" style="display: none;">
+        <div id="mdbin-error-msg" class="crypto-alert-error" role="alert" hidden>
           <span class="error-icon">⚠️</span>
-          <span class="error-text">Contraseña incorrecta o el archivo ha sido alterado.</span>
+          <span class="error-text" id="mdbin-error-text"></span>
         </div>
 
         <div class="modal-actions">
-          <button id="cancel-mdbin-btn" class="btn-secondary">Cancelar</button>
+          <button id="cancel-mdbin-btn" class="btn-secondary" data-i18n="mdbin.cancelBtn">Cancelar</button>
           <button id="submit-mdbin-btn" class="btn-primary-glow">
-            <span>Descifrar Documento</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span class="btn-spinner" aria-hidden="true"></span>
+            <span id="submit-mdbin-label">Descifrar Documento</span>
+            <svg class="btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </button>
         </div>
       </div>
     </div>
   </div>
-
-
 
   <script type="module" src="/src/main.ts"></script>
 </body>
