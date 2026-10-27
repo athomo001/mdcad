@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuración de artefacto para SignPath. No se lee desde el repo: hay que
+  pegarla en app.signpath.io → proyecto → Artifact Configurations.
+
+  El artefacto "mdcat-Windows" que sube el workflow es un zip con la raíz en
+  target/dist, así que su contenido es:
+    mdcat-tauri.exe
+    bundle/msi/MDCAT Extended_<versión>_x64_es-ES.msi
+    bundle/nsis/MDCAT Extended_<versión>_x64-setup.exe
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="mdcat-tauri.exe">
+      <authenticode-sign />
+    </pe-file>
+    <msi-file path="bundle/msi/*.msi">
+      <authenticode-sign />
+    </msi-file>
+    <pe-file path="bundle/nsis/*-setup.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

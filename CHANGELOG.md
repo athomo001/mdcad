@@ -7,7 +7,15 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-## [Sin publicar]
+## [1.1.7] — 2026-10-27
+
+### Añadido (Added)
+- **Versiones para todos los sistemas en cada release**: Windows (instaladores `-setup.exe` y `.msi`, y `.exe` portable), macOS (`.dmg` universal para Intel y Apple Silicon) y Linux (`.deb`, `.rpm` y `.AppImage`), compiladas automáticamente en GitHub Actions a partir del código del repositorio.
+- Cada release incluye `SHA256SUMS.txt` con las huellas de todos los archivos.
+
+---
+
+## [1.1.6] — 2026-10-27
 
 ### Añadido (Added)
 - **Archivos de texto plano**: además de Markdown se abre cualquier archivo de texto (`.txt`, `.log`, `.csv`, `.json`, `.yaml`, `.ini`, código fuente, archivos sin extensión…), tanto con `Ctrl + O` como arrastrándolo a la ventana. Los que no son Markdown se muestran tal cual, con resaltado según su tipo; los `.txt` y `.log` ajustan las líneas largas. Los archivos binarios se rechazan con un aviso.

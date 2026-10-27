@@ -131,6 +131,17 @@ Get-FileHash .\MDCAT_Extended_*_Portable.exe -Algorithm SHA256
 
 Si prefieres no confiar en ningún binario, el código fuente está completo en este repositorio y puedes [compilarlo tú mismo](#compilación). Lo que compilas en tu propio equipo no muestra el aviso, porque Windows no lo considera descargado.
 
+### Política de firma de código
+
+Firma de código gratuita provista por [SignPath.io](https://about.signpath.io), certificado de [SignPath Foundation](https://signpath.org).
+
+Los binarios de Windows (portable `.exe`, `.msi` y `-setup.exe`) se compilan en GitHub Actions a partir de este repositorio y se firman solo después de una aprobación manual.
+
+- **Autores y revisores**: [athomo001](https://github.com/athomo001)
+- **Aprobadores**: [athomo001](https://github.com/athomo001)
+
+**Privacidad**: MDCAT no envía información a otros sistemas de la red, salvo cuando el usuario lo pide expresamente. La única función que se conecta a internet es la lectura en voz alta con las voces neuronales de Edge, que envía a Microsoft el texto que se va a leer. Las voces locales de Windows funcionan sin conexión.
+
 > [!NOTE]
 > MDCAT necesita **WebView2**, que ya viene incluido en Windows 11 y en Windows 10 actualizado. Si el portable no abre en un Windows 10 antiguo, instala el [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) o usa el instalador `-setup.exe`, que lo descarga automáticamente.
 
@@ -204,7 +215,7 @@ La app queda en `target/dist/bundle/macos/MDCAT Extended.app` y el instalador en
 > - Por ahora, abrir un `.md` con doble clic desde Finder arranca la app sin cargar el archivo. Ábrelo con `Cmd + O` o arrastrándolo a la ventana.
 > - Las voces locales del TTS son las de macOS; las voces neuronales de Edge funcionan igual que en Windows.
 
-GitHub Actions (`.github/workflows/build.yml`) genera los builds de Windows y Linux al publicar un tag `v*` o al lanzarlo a mano. El de macOS se compila en local con los pasos de arriba.
+GitHub Actions (`.github/workflows/build.yml`) compila Windows, macOS (universal) y Linux al empujar un tag `MDCATv*` (por ejemplo `MDCATv1.1.7`) y publica la release con todos los archivos y `SHA256SUMS.txt`. También se puede lanzar a mano desde la pestaña *Actions*; en ese caso solo deja los binarios como artefactos, sin publicar nada.
 
 ### Instaladores y asociación de archivos
 

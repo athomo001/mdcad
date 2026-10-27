@@ -1,8 +1,11 @@
+# Compila MDCAT para Linux, macOS y Windows.
+#   - Al empujar un tag (MDCATv1.2.3 o v1.2.3): compila todo y publica la Release.
+#   - "Run workflow" a mano desde la pestaña Actions: solo compila (artefactos descargables).
 name: Build
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "MDCATv*"]
   workflow_dispatch:
 
 jobs:
@@ -16,12 +19,20 @@ jobs:
               target/dist/bundle/deb/*.deb
               target/dist/bundle/rpm/*.rpm
               target/dist/bundle/appimage/*.AppImage
+          - os: macos-latest
+            # Binario universal: un solo .dmg para Intel y Apple Silicon.
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            build-args: --target universal-apple-darwin
+            artifacts: target/universal-apple-darwin/dist/bundle/dmg/*.dmg
           - os: windows-latest
             artifacts: |
               target/dist/mdcat-tauri.exe
               target/dist/bundle/msi/*.msi
               target/dist/bundle/nsis/*.exe
     runs-on: ${{ matrix.os }}
+    env:
+      # Mientras no exista el secreto, el build funciona igual pero sin firmar.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,20 +43,111 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libssl-dev libxdo-dev patchelf
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npx tauri build -- --profile dist
+      - run: pnpm exec tauri build ${{ matrix.build-args }} -- --profile dist
 
-      - uses: actions/upload-artifact@v4
+      - name: Guardar binarios
+        id: upload
+        uses: actions/upload-artifact@v4
         with:
           name: mdcat-${{ runner.os }}
           path: ${{ matrix.artifacts }}
+
+      # SignPath firma el portable, el .msi y el -setup.exe. La firma queda
+      # pendiente hasta que un aprobador la acepta en app.signpath.io.
+      - name: Firmar con SignPath
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: firmados
+
+      - name: Guardar binarios firmados
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdcat-Windows-firmado
+          path: firmados
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefactos
+
+      - name: Preparar archivos
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#MDCATv}"
+          version="${version#v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          mkdir release
+
+          # Windows: se usan los firmados si SignPath está configurado.
+          win=artefactos/mdcat-Windows
+          [ -d artefactos/mdcat-Windows-firmado ] && win=artefactos/mdcat-Windows-firmado
+          cp "$win/mdcat-tauri.exe" "release/MDCAT_Extended_${version}_Portable.exe"
+          cp "$win"/bundle/msi/*.msi "$win"/bundle/nsis/*-setup.exe release/
+          find artefactos/mdcat-Linux artefactos/mdcat-macOS -type f -exec cp {} release/ \;
+
+          # "MDCAT Extended_1.2.3_x64.msi" → "MDCAT_Extended_1.2.3_x64.msi"
+          shopt -s nullglob
+          for f in release/*' '*; do mv "$f" "${f// /_}"; done
+          (cd release && sha256sum * > SHA256SUMS.txt)
+          ls -l release
+
+      - name: Notas de la versión
+        run: |
+          set -euo pipefail
+          # La sección "## [X.Y.Z]" del CHANGELOG, hasta la siguiente versión.
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on && !/^---$/ { print }
+          ' CHANGELOG.md > notas.md
+          cat >> notas.md <<'EOF'
+
+          ### Descargas
+
+          | Sistema | Archivo |
+          |---|---|
+          | Windows | `-setup.exe` (instalador), `.msi` (instalador) o `_Portable.exe` (sin instalar) |
+          | macOS (Intel y Apple Silicon) | `.dmg` |
+          | Linux | `.deb` (Debian/Ubuntu), `.rpm` (Fedora/openSUSE) o `.AppImage` (cualquier distro) |
+
+          Las huellas SHA-256 están en `SHA256SUMS.txt`. Si Windows muestra **"Windows protegió su PC"**, pulsa *Más información* → *Ejecutar de todas formas*. En macOS, si dice que la app está dañada: `xattr -cr "/Applications/MDCAT Extended.app"`.
+          EOF
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "MDCAT v$VERSION" --notes-file notas.md
