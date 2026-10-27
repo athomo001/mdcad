@@ -123,7 +123,7 @@ El mismo código se compila para **Windows, macOS y Linux** sin cambios: basta c
 
 Solo hay que hacerlo la primera vez. Otra opción es hacer clic derecho en el `.exe` → **Propiedades** → marcar **Desbloquear** → **Aceptar**.
 
-**¿Cómo sé que es el original?** Descárgalo solo desde las [Releases de GitHub](https://github.com/cybeersecurity/mdcat/releases) y compara su huella SHA-256 con la publicada en la release:
+**¿Cómo sé que es el original?** Descárgalo solo desde las [Releases de GitHub](https://github.com/athomo001/mdcad/releases) y compara su huella SHA-256 con la del archivo `SHA256SUMS.txt` de la release:
 
 ```powershell
 Get-FileHash .\MDCAT_Extended_*_Portable.exe -Algorithm SHA256

@@ -2010,7 +2010,7 @@ class App {
 
     document.getElementById('action-report-issue')?.addEventListener('click', () => {
       this.closeMenus();
-      window.open('https://github.com/cybeersecurity/mdcat', '_blank');
+      window.open('https://github.com/athomo001/mdcad', '_blank');
     });
 
     document.getElementById('action-check-updates')?.addEventListener('click', () => {
